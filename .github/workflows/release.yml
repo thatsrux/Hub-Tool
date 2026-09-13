@@ -22,4 +22,6 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create '${{ github.ref_name }}' artifacts/*.zip artifacts/*.exe artifacts/SHA256SUMS-*.txt --verify-tag --prerelease --title 'Hub Tool ${{ github.ref_name }}' --notes-file docs/RELEASE-NOTES.md
+        run: |
+          $hubAssets = @(Get-ChildItem artifacts -File | Where-Object { $_.Extension -in '.zip','.exe' -or $_.Name -like 'SHA256SUMS-*' } | ForEach-Object FullName)
+          gh release create '${{ github.ref_name }}' @hubAssets --verify-tag --prerelease --title 'Hub Tool ${{ github.ref_name }}' --notes-file docs/RELEASE-NOTES.md

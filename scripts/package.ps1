@@ -1,6 +1,6 @@
 param(
-    [string]$Version = '0.2.0',
-    [string]$Runtime = 'win-x64',
+    [ValidatePattern('^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$')][string]$Version = '0.2.0',
+    [ValidateSet('win-x64','win-arm64')][string]$Runtime = 'win-x64',
     [string]$Dotnet = 'dotnet'
 )
 $ErrorActionPreference = 'Stop'
@@ -9,6 +9,12 @@ $hubArtifacts = Join-Path $hubRoot 'artifacts'
 New-Item -ItemType Directory -Path $hubArtifacts -Force | Out-Null
 foreach ($hubFlavor in @('portable', 'compact')) {
     $hubOutput = Join-Path $hubArtifacts "$Runtime-$hubFlavor-$Version"
+    if (Test-Path -LiteralPath $hubOutput) {
+        $hubResolvedOutput = [System.IO.Path]::GetFullPath($hubOutput)
+        $hubResolvedArtifacts = [System.IO.Path]::GetFullPath($hubArtifacts) + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $hubResolvedOutput.StartsWith($hubResolvedArtifacts, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Output must stay within artifacts' }
+        Remove-Item -LiteralPath $hubResolvedOutput -Recurse -Force
+    }
     $hubStandalone = if ($hubFlavor -eq 'portable') { 'true' } else { 'false' }
     & $Dotnet publish (Join-Path $hubRoot 'HubTool/HubTool.csproj') -c Release -r $Runtime --self-contained $hubStandalone -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:Version=$Version -o $hubOutput
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
