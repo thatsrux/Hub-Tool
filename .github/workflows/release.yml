@@ -1,0 +1,25 @@
+name: Release Windows
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet run --project HubTool.Tests/HubTool.Tests.csproj -c Release
+      - name: Build packages
+        shell: pwsh
+        run: |
+          $hubVersion = '${{ github.ref_name }}'.TrimStart('v')
+          ./scripts/package.ps1 -Version $hubVersion
+      - name: Publish prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create '${{ github.ref_name }}' artifacts/*.zip artifacts/*.exe artifacts/SHA256SUMS-*.txt --verify-tag --prerelease --title 'Hub Tool ${{ github.ref_name }}' --notes-file docs/RELEASE-NOTES.md
