@@ -1,5 +1,5 @@
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$')][string]$Version = '0.2.0',
+    [ValidatePattern('^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$')][string]$Version = '0.3.0',
     [ValidateSet('win-x64','win-arm64')][string]$Runtime = 'win-x64',
     [string]$Dotnet = 'dotnet'
 )
@@ -16,7 +16,8 @@ foreach ($hubFlavor in @('portable', 'compact')) {
         Remove-Item -LiteralPath $hubResolvedOutput -Recurse -Force
     }
     $hubStandalone = if ($hubFlavor -eq 'portable') { 'true' } else { 'false' }
-    & $Dotnet publish (Join-Path $hubRoot 'HubTool/HubTool.csproj') -c Release -r $Runtime --self-contained $hubStandalone -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:Version=$Version -o $hubOutput
+    $hubBuildRoot = Join-Path $hubRoot ".tools/package-build/$Version/$Runtime/$hubFlavor/"
+    & $Dotnet publish (Join-Path $hubRoot 'HubTool/HubTool.csproj') -c Release -r $Runtime --self-contained $hubStandalone -p:BaseOutputPath=$hubBuildRoot -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=$hubStandalone -p:DebugType=None -p:Version=$Version -o $hubOutput
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
     Copy-Item (Join-Path $hubRoot 'README.md'),(Join-Path $hubRoot 'LICENSE'),(Join-Path $hubRoot 'THIRD-PARTY-NOTICES.md') -Destination $hubOutput
     Copy-Item (Join-Path $hubRoot 'licenses') -Destination $hubOutput -Recurse -Force
@@ -25,6 +26,8 @@ foreach ($hubFlavor in @('portable', 'compact')) {
     Compress-Archive -Path "$hubOutput/*" -DestinationPath $hubZip -Force
     if ($hubFlavor -eq 'portable') {
         Copy-Item (Join-Path $hubOutput 'HubTool.exe') (Join-Path $hubArtifacts "HubTool-$Version-$Runtime.exe") -Force
+    } else {
+        Copy-Item (Join-Path $hubOutput 'HubTool.exe') (Join-Path $hubArtifacts "HubTool-$Version-$Runtime-compact.exe") -Force
     }
 }
 $hubFiles = Get-ChildItem -LiteralPath $hubArtifacts -File | Where-Object { $_.Name -like "HubTool-$Version-$Runtime*" -and $_.Extension -in '.zip','.exe' }

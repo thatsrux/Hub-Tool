@@ -1,5 +1,9 @@
-Prima prerelease pubblica di Hub Tool, un'app Windows nativa per inventario dispositivi, controlli audio e input, monitor DDC/CI, profili, shortcut globali e overlay selezionabile.
+Hub Tool 0.3.0: revisione dell'interfaccia e dell'overlay.
 
-Download x64: eseguibile autonomo, ZIP portable con licenze oppure ZIP compatto che richiede .NET 8 Desktop Runtime. Le impronte SHA-256 sono incluse. I binari non sono firmati Authenticode.
+- Solo periferiche d'interfaccia: esclusi CPU, bus, controller host e root hub; icone specifiche per tipo.
+- UI più compatta, filtri per categoria, contatori e riepilogo dei profili; rimossi slogan.
+- Overlay circolare 52 × 52 DIP, trascinabile e senza barra del titolo. Il clic apre schede separate; Escape comprime mantenendo la posizione.
+- Verificata l'iterazione precedente; aggiunti import/export profili e conservazione delle impostazioni fallite.
+- Rimossa Windows Forms, nessun asset aggiuntivo oltre all'icona EXE. EXE compatto per .NET 8 Desktop Runtime e EXE autonomo compresso.
 
-Questa versione non soddisfa ancora la copertura universale dell'hardware. Le funzioni proprietarie, i controlli avanzati di varie categorie e l'ottimizzazione dei consumi restano in sviluppo. Le letture hardware e i test del modello sono passati; le scritture su ogni driver e il comportamento dell'overlay in tutti i giochi non sono certificati. Consulta README e docs/CAPABILITIES.md per la copertura precisa.
+Build e controlli automatici passati, incluso filtro hardware e rendering a dimensione minima. L'EXE non è firmato Authenticode; i checksum SHA-256 sono inclusi. Consulta README per runtime richiesto e limiti dei driver.

@@ -1,18 +1,18 @@
-# Copertura effettiva — 0.2.0
+# Copertura effettiva — 0.3.0
 
 | Categoria | Rilevamento | Controlli diretti | Limiti |
 |---|---|---|---|
-| Plug and Play | Tutte le classi presenti esposte da SetupAPI | Inventario, preferenze overlay, pannello categoria | Non è un pannello universale dei driver; componenti interni e virtuali sono inclusi |
+| Plug and Play | Periferiche d'interfaccia; esclusi CPU, bus, host controller e root hub | Catalogo, icone, categorie e pannello specifico | I nodi interni non fanno parte dell'interfaccia richiesta |
 | Cuffie / speaker | Endpoint Core Audio attivi | Volume, mute, dB, singoli canali | EQ, surround e DSP proprietari non integrati |
 | Microfoni | Endpoint Core Audio attivi | Volume, mute, dB, singoli canali | Il livello in dB non equivale necessariamente a gain analogico o boost hardware |
 | Mouse | PnP + preferenze Windows | Velocità, doppio clic, rotella, scambio pulsanti | Preferenze globali; DPI, polling rate, pulsanti firmware e RGB non integrati |
 | Tastiere | PnP + preferenze Windows | Velocità e ritardo ripetizione | Preferenze globali; rimappatura per dispositivo, macro e RGB non integrati |
 | Monitor | PnP + monitor fisici Windows | Luminosità e contrasto se DDC/CI risponde | Alcuni pannelli interni, dock e driver non espongono questi controlli; WMI brightness non ancora integrata |
-| Webcam | PnP | Apertura pannello Windows | Esposizione, fuoco e controlli video non ancora integrati |
+| Webcam | PnP + DirectShow | Esposizione, fuoco, zoom, pan/tilt, luminosità, contrasto e altri controlli standard dichiarati dal driver | Nessuna cattura video; estensioni proprietarie non integrate; valori/auto disponibili solo quando supportati |
 | Controller | PnP | Inventario e preferenze overlay | Test input, vibrazione, deadzone e rimappature non ancora integrati |
 | Stampanti | PnP | Apertura pannello stampanti | Code e preferenze specifiche non integrate |
-| Rete / Bluetooth | PnP | Apertura pannello categoria | Connessioni, pairing e configurazione avanzata non integrati |
-| Dischi / USB / altri | PnP | Inventario e pannello dispositivi | Espulsione, gestione alimentazione e altri controlli non integrati |
+| Rete / Bluetooth | Pannelli Windows | Apertura impostazioni | Adattatori interni non elencati come periferiche |
+| Hub USB esterni / memoria USB | PnP filtrato | Inventario e pannello dispositivi | Controller host e root hub esclusi; espulsione e gestione alimentazione non integrate |
 
 ## Persistenza
 

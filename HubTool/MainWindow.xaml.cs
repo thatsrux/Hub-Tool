@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Windows.Data;
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 
@@ -22,14 +23,13 @@ public partial class MainWindow : Window
     private readonly HashSet<string> pendingAudio = new();
     private readonly MMDeviceEnumerator events = new();
     private readonly Notifications notifications;
-    private readonly System.Windows.Forms.NotifyIcon tray = new();
+    private TrayIcon? tray;
     private readonly SemaphoreSlim operations = new(1, 1);
     private readonly List<string> shortcutErrors = new();
-    private Window? overlay;
-    private StackPanel? overlayBody;
-    private bool expanded = true;
+    private OverlayWindow? overlay;
     private bool exiting;
     private IntPtr handle;
+    private IntPtr previousForeground;
 
     private sealed record ActionOption(string Label, string Action, string DeviceId = "", string Control = "");
 
@@ -55,8 +55,6 @@ public partial class MainWindow : Window
                     if (device != null) service.ReadAudio(device);
                 }
                 pendingAudio.Clear(); state.Save();
-                if (IsVisible) SelectionChanged(this, new SelectionChangedEventArgs(System.Windows.Controls.Primitives.Selector.SelectionChangedEvent, Array.Empty<object>(), Array.Empty<object>()));
-                if (overlay?.IsVisible == true) RenderOverlay();
                 return Task.CompletedTask;
             });
         };
@@ -69,23 +67,16 @@ public partial class MainWindow : Window
         Loaded += async (_, _) =>
         {
             handle = new WindowInteropHelper(this).Handle;
+            Native.DarkCaption(handle);
             HwndSource.FromHwnd(handle).AddHook(Hook);
+            if (App.PreviewDirectory == null) tray = new TrayIcon(handle, OpenHub, () => ToggleOverlay(false), () => { exiting = true; Close(); });
             if (App.PreviewDirectory == null) RegisterShortcuts();
             else Shortcuts.ItemsSource = state.Shortcuts;
             events.RegisterEndpointNotificationCallback(notifications);
             await RunAsync(RefreshCore);
-            if (state.OverlayEnabled) ToggleOverlay();
+            if (state.OverlayEnabled) ToggleOverlay(false);
             await PreviewCapture.TryCaptureAsync(this);
         };
-        tray.Icon = Environment.ProcessPath is string exe ? System.Drawing.Icon.ExtractAssociatedIcon(exe) : System.Drawing.SystemIcons.Application;
-        tray.Text = "Hub Tool";
-        tray.Visible = App.PreviewDirectory == null;
-        tray.DoubleClick += (_, _) => OpenHub();
-        var menu = new System.Windows.Forms.ContextMenuStrip();
-        menu.Items.Add("Apri Hub Tool", null, (_, _) => OpenHub());
-        menu.Items.Add("Overlay", null, (_, _) => ToggleOverlay());
-        menu.Items.Add("Esci", null, (_, _) => { exiting = true; Close(); });
-        tray.ContextMenuStrip = menu;
         Closing += (_, e) =>
         {
             if (!exiting) { e.Cancel = true; Hide(); return; }
@@ -94,13 +85,15 @@ public partial class MainWindow : Window
             foreach (var id in registered.Keys) Native.UnregisterHotKey(handle, id);
             debounce.Stop(); audioDebounce.Stop();
             events.UnregisterEndpointNotificationCallback(notifications);
-            events.Dispose(); service.Dispose(); tray.Dispose(); overlay?.Close();
+            events.Dispose(); service.Dispose(); tray?.Dispose(); overlay?.Close();
         };
     }
 
     private void OpenHub() { Show(); WindowState = WindowState.Normal; Activate(); }
+    private async void ExitHub(object sender, RoutedEventArgs e) => await RunAsync(() => { exiting = true; Close(); return Task.CompletedTask; });
     private IntPtr Hook(IntPtr hwnd, int message, IntPtr w, IntPtr l, ref bool handled)
     {
+        if (tray?.Handle(message, l) == true) { handled = true; return IntPtr.Zero; }
         if (message == 0x312 && registered.TryGetValue(w.ToInt32(), out var shortcut))
         {
             _ = RunAsync(() => ExecuteAsync(shortcut)); handled = true;
@@ -127,7 +120,7 @@ public partial class MainWindow : Window
         Profiles.ItemsSource = null; Profiles.ItemsSource = state.Profiles;
         Profiles.SelectedItem = selected ?? state.Profiles.FirstOrDefault();
         PopulateActions();
-        Status.Text = $"{state.Devices.Count(d => d.Connected)} collegati · {state.Devices.Count(d => !d.Connected)} in memoria · chiudi per lasciare Hub nell’area notifiche";
+        Status.Text = $"{state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && d.Connected)} collegati · {state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && !d.Connected)} scollegati";
         if (service.Errors.Count > 0) Status.Text += " · " + string.Join("; ", service.Errors);
         if (shortcutErrors.Count > 0) Status.Text += " · " + string.Join("; ", shortcutErrors);
         if (state.RecoveryNotice.Length > 0) Status.Text += " · " + state.RecoveryNotice;
@@ -138,8 +131,10 @@ public partial class MainWindow : Window
     {
         var selected = (DeviceList.SelectedItem as Device)?.Id;
         var q = Search.Text.Trim();
-        var list = state.Devices
+        var category = (CategoryFilter.SelectedItem as ComboBoxItem)?.Content?.ToString();
+        var list = state.Devices.Where(PeripheralCatalog.IsVisible)
             .Where(d => (q.Length == 0 || (d.Name + " " + d.Kind).Contains(q, StringComparison.OrdinalIgnoreCase))
+                && (category == null || category == "Tutti" || d.Category == category)
                 && (OnlyControllable.IsChecked != true || d.Volume.HasValue || d.Controls.Count > 0)
                 && (ShowDisconnected.IsChecked == true || d.Connected))
             .OrderByDescending(d => d.Volume.HasValue || d.Controls.Count > 0)
@@ -147,10 +142,14 @@ public partial class MainWindow : Window
         DeviceList.ItemsSource = list;
         DeviceList.SelectedItem = list.FirstOrDefault(d => d.Id == selected) ?? list.FirstOrDefault();
         DeviceCount.Text = list.Count + " dispositivi";
+        ConnectedCount.Text = state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && d.Connected).ToString();
+        OverlayCount.Text = state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && d.Overlay).ToString();
+        ProfileCount.Text = state.Profiles.Count.ToString();
     }
 
     private void SearchChanged(object sender, TextChangedEventArgs e) { if (service != null) RenderList(); }
     private void FilterChanged(object sender, RoutedEventArgs e) { if (service != null) RenderList(); }
+    private void CategoryChanged(object sender, SelectionChangedEventArgs e) { if (service != null) RenderList(); }
     private void SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         Details.Children.Clear();
@@ -166,8 +165,16 @@ public partial class MainWindow : Window
 
     private void RenderDevice(StackPanel panel, Device device, bool compact)
     {
-        panel.Children.Add(Text(device.Name, compact ? 16 : 25));
-        panel.Children.Add(Text(device.Kind + " · " + device.Status, 12));
+        var header = new Grid { Margin = new Thickness(0, 0, 0, compact ? 8 : 16) };
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(compact ? 40 : 56) });
+        header.ColumnDefinitions.Add(new ColumnDefinition());
+        var icon = new Border { Width = compact ? 32 : 44, Height = compact ? 32 : 44, CornerRadius = new CornerRadius(10),
+            Background = (Brush)new BrushConverter().ConvertFromString("#223044")!, Child = DeviceIcons.Create(device, compact ? 19 : 25), VerticalAlignment = VerticalAlignment.Top };
+        header.Children.Add(icon);
+        var titles = new StackPanel(); titles.Children.Add(Text(device.Name, compact ? 14 : 21));
+        titles.Children.Add(new TextBlock { Text = device.TypeLabel + " · " + device.Status, FontSize = 11,
+            Foreground = (Brush)FindResource("Muted"), TextWrapping = TextWrapping.Wrap });
+        Grid.SetColumn(titles, 1); header.Children.Add(titles); panel.Children.Add(header);
         if (device.Error.Length > 0) panel.Children.Add(Text(device.Error, 12));
         if (device.Volume.HasValue)
         {
@@ -175,8 +182,10 @@ public partial class MainWindow : Window
             {
                 service.SetAudio(device, (float)value / 100, device.Muted);
                 state.Save(); await Task.CompletedTask;
-            });
+            }, device, "");
             var mute = new CheckBox { Content = "Mute", IsChecked = device.Muted };
+            mute.SetBinding(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty,
+                new Binding(nameof(Device.Muted)) { Source = device, Mode = BindingMode.OneWay });
             mute.Click += async (_, _) => await RunAsync(() =>
             {
                 service.SetAudio(device, device.Volume.Value, mute.IsChecked == true); state.Save();
@@ -184,8 +193,8 @@ public partial class MainWindow : Window
             });
             panel.Children.Add(mute);
         }
-        if (device.Id.StartsWith("windows:"))
-            panel.Children.Add(Text("Preferenze condivise da tutti i dispositivi di questa categoria in Windows.", 12));
+        if (device.Kind is "Keyboard" or "Mouse")
+            panel.Children.Add(Text("Preferenze Windows condivise con le altre " + (device.Kind == "Keyboard" ? "tastiere." : "periferiche mouse."), 11));
 
         var controlPanel = new StackPanel();
         foreach (var control in device.Controls)
@@ -194,6 +203,8 @@ public partial class MainWindow : Window
             if (control.Toggle)
             {
                 var check = new CheckBox { Content = control.Label, IsChecked = value != 0 };
+                check.SetBinding(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty,
+                    new Binding("Values[" + control.Id + "]") { Source = device, Mode = BindingMode.OneWay, Converter = new ToggleConverter() });
                 check.Click += async (_, _) => await RunAsync(async () =>
                 {
                     await service.SetControlAsync(device, control.Id, check.IsChecked == true ? 1 : 0); state.Save();
@@ -201,7 +212,7 @@ public partial class MainWindow : Window
                 controlPanel.Children.Add(check);
             }
             else AddSlider(controlPanel, control.Label, control.Min, control.Max, control.Step, value, control.Unit,
-                async newValue => { await service.SetControlAsync(device, control.Id, newValue); state.Save(); });
+                async newValue => { await service.SetControlAsync(device, control.Id, newValue); state.Save(); }, device, control.Id);
         }
         if (device.Volume.HasValue)
             panel.Children.Add(new Expander { Header = "Canali e livello in dB", Content = controlPanel, Margin = new Thickness(0, 12, 0, 12), Foreground = Brushes.White });
@@ -210,7 +221,7 @@ public partial class MainWindow : Window
         if (!compact)
         {
             var pin = new CheckBox { Content = "Mostra nell’overlay", IsChecked = device.Overlay };
-            pin.Click += (_, _) => { device.Overlay = pin.IsChecked == true; state.Save(); RenderOverlay(); };
+            pin.Click += (_, _) => { device.Overlay = pin.IsChecked == true; state.Save(); OverlayCount.Text = state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && d.Overlay).ToString(); RenderOverlay(); };
             panel.Children.Add(pin);
             if (device.Volume.HasValue || device.Controls.Count > 0)
             {
@@ -219,10 +230,10 @@ public partial class MainWindow : Window
                 panel.Children.Add(restore);
             }
             if (device.Volume.HasValue)
-                panel.Children.Add(Text("I dB regolano il livello esposto dal driver Windows. Il gain analogico, il boost e gli effetti proprietari possono avere controlli separati nel software del produttore.", 12));
+                panel.Children.Add(Text("dB e canali: controlli del driver audio Windows.", 11));
             if (device.Controls.Count == 0 && !device.Volume.HasValue)
-                panel.Children.Add(Text("Windows rileva questo dispositivo. Nessun controllo diretto è ancora integrato per questo driver; puoi aprire il pannello della categoria.", 14));
-            var open = new Button { Content = "Impostazioni di " + device.Kind, HorizontalAlignment = HorizontalAlignment.Left };
+                panel.Children.Add(Text("Impostazioni gestite da Windows o dal software del produttore.", 12));
+            var open = new Button { Content = "Impostazioni Windows", HorizontalAlignment = HorizontalAlignment.Left };
             open.Click += async (_, _) => await RunAsync(() => { Launch(SettingsTarget(device)); return Task.CompletedTask; });
             panel.Children.Add(open);
             var metadata = new StackPanel();
@@ -233,7 +244,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void AddSlider(StackPanel panel, string label, double min, double max, double step, double value, string unit, Func<double, Task> apply)
+    private void AddSlider(StackPanel panel, string label, double min, double max, double step, double value, string unit, Func<double, Task> apply, Device? device = null, string key = "")
     {
         var heading = Text($"{label}  ·  {value:0.##} {unit}");
         var slider = new Slider { Minimum = min, Maximum = max, TickFrequency = step, SmallChange = step,
@@ -241,9 +252,16 @@ public partial class MainWindow : Window
             Margin = new Thickness(2, 8, 2, 16), ToolTip = label };
         System.Windows.Automation.AutomationProperties.SetName(slider, label);
         double committed = slider.Value;
+        bool edited = false;
+        slider.PreviewMouseLeftButtonDown += (_, _) => edited = true;
+        slider.PreviewKeyDown += (_, e) => { if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Home or Key.End or Key.PageUp or Key.PageDown) edited = true; };
         slider.ValueChanged += (_, _) => heading.Text = $"{label}  ·  {slider.Value:0.##} {unit}";
+        if (device != null) slider.SetBinding(Slider.ValueProperty, new Binding(key.Length == 0 ? nameof(Device.Volume) : "Values[" + key + "]")
+        { Source = device, Mode = BindingMode.OneWay, Converter = key.Length == 0 ? new PercentConverter() : null });
         async Task Commit()
         {
+            if (!edited) return;
+            edited = false;
             if (Math.Abs(committed - slider.Value) < .0001) return;
             await RunAsync(async () => { await apply(slider.Value); committed = slider.Value; });
         }
@@ -288,7 +306,7 @@ public partial class MainWindow : Window
             new("Abbassa volume uscite del 5%", "volume-down"), new("Apri un programma o file", "launch")
         };
         choices.AddRange(state.Profiles.Select(p => new ActionOption("Profilo · " + p.Name, "profile:" + p.Name)));
-        foreach (var device in state.Devices)
+        foreach (var device in state.Devices.Where(PeripheralCatalog.IsVisible))
         {
             if (device.Volume.HasValue)
             {
@@ -336,49 +354,67 @@ public partial class MainWindow : Window
         state.Save(); RenderList(); RenderOverlay();
     }
 
-    private void ToggleOverlay()
+    private void ToggleOverlay(bool focus = true)
     {
+        var foreground = Native.GetForegroundWindow();
+        if (focus && (overlay == null || foreground != new WindowInteropHelper(overlay).Handle)) previousForeground = foreground;
         if (overlay == null)
         {
-            overlayBody = new StackPanel { Margin = new Thickness(14) };
-            overlay = new Window { Title = "Hub overlay", Width = 340, Height = 440, MinWidth = 270, Topmost = true,
-                ShowInTaskbar = false, ResizeMode = ResizeMode.CanResizeWithGrip, Content = new ScrollViewer { Content = overlayBody },
-                Left = Math.Clamp(state.OverlayLeft ?? SystemParameters.WorkArea.Right - 360, SystemParameters.VirtualScreenLeft,
-                    Math.Max(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - 340)),
-                Top = Math.Clamp(state.OverlayTop ?? SystemParameters.WorkArea.Top + 30, SystemParameters.VirtualScreenTop,
-                    Math.Max(SystemParameters.VirtualScreenTop, SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - 100)) };
-            overlay.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { overlay.Hide(); e.Handled = true; } };
-            overlay.Closing += (_, _) => { SaveOverlayPosition(); state.OverlayEnabled = false; state.Save(); };
-            overlay.Closed += (_, _) => { overlay = null; overlayBody = null; };
-            RenderOverlay();
+            overlay = new OverlayWindow(CreateOverlayModules, SaveOverlayPosition, ReturnFocus)
+            { Left = state.OverlayLeft ?? SystemParameters.WorkArea.Right - 74, Top = state.OverlayTop ?? SystemParameters.WorkArea.Bottom - 90 };
+            overlay.Closing += (_, _) => { SaveOverlayPosition(); if (!exiting) state.OverlayEnabled = false; state.Save(); };
+            overlay.Closed += (_, _) => { overlay = null; OverlayToggle.Content = "Overlay"; };
         }
         state.OverlayEnabled = true;
+        OverlayToggle.Content = "Disattiva overlay";
         if (!overlay.IsVisible) overlay.Show();
-        overlay.Activate(); overlay.Focus(); state.Save();
+        overlay.KeepOnScreen();
+        if (focus) { overlay.SetExpanded(true); overlay.Activate(); overlay.Focus(); }
+        state.Save();
     }
 
-    private void SaveOverlayPosition() { if (overlay != null) { state.OverlayLeft = overlay.Left; state.OverlayTop = overlay.Top; } }
-    private void RenderOverlay()
+    private void ReturnFocus()
     {
-        if (overlayBody == null) return;
-        overlayBody.Children.Clear();
-        var toggle = new Button { Content = expanded ? "HUB   −   Comprimi" : "HUB   +   Espandi" };
-        toggle.Click += (_, _) => { expanded = !expanded; overlay!.Height = expanded ? 440 : 115; RenderOverlay(); };
-        overlayBody.Children.Add(toggle);
-        if (!expanded) return;
-        var devices = state.Devices.Where(d => d.Overlay).ToList();
-        if (devices.Count == 0) overlayBody.Children.Add(Text("Seleziona «Mostra nell’overlay» nei dispositivi da tenere a portata di mano."));
-        foreach (var device in devices) RenderDevice(overlayBody, device, true);
+        if (previousForeground != IntPtr.Zero && Native.IsWindow(previousForeground)) Native.SetForegroundWindow(previousForeground);
+        previousForeground = IntPtr.Zero;
+    }
+
+    private void SaveOverlayPosition() { if (overlay != null) { state.OverlayLeft = overlay.BadgePosition.X; state.OverlayTop = overlay.BadgePosition.Y; state.Save(); } }
+    private void RenderOverlay() { overlay?.RefreshModules(); if (overlay?.IsVisible == true) overlay.KeepOnScreen(); }
+    internal OverlayWindow CreateDiagnosticOverlay()
+    {
+        if (App.PreviewDirectory == null) throw new InvalidOperationException("Richiede preferenze isolate");
+        foreach (var device in state.Devices.Where(PeripheralCatalog.IsVisible).Where(d => d.Volume.HasValue || d.Kind == "Monitor")
+            .OrderByDescending(d => d.Volume.HasValue).GroupBy(d => d.Category).Take(3).Select(g => g.First())) device.Overlay = true;
+        return new OverlayWindow(CreateOverlayModules, () => { }, () => { })
+        { Left = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth + 100, Top = SystemParameters.VirtualScreenTop + 100 };
+    }
+    private StackPanel CreateOverlayModules()
+    {
+        var body = new StackPanel();
+        var devices = state.Devices.Where(d => PeripheralCatalog.IsVisible(d) && d.Overlay).ToList();
+        if (devices.Count == 0)
+        {
+            body.Children.Add(Text("Nessun dispositivo selezionato.", 12));
+            var open = new Button { Content = "Scegli dispositivi" }; open.Click += (_, _) => OpenHub(); body.Children.Add(open);
+        }
+        foreach (var device in devices)
+        {
+            var module = new StackPanel(); RenderDevice(module, device, true);
+            body.Children.Add(new Border { Background = (Brush)FindResource("Panel"), BorderBrush = (Brush)new BrushConverter().ConvertFromString("#293B50")!,
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(12), Margin = new Thickness(0, 0, 0, 8), Child = module });
+        }
         if (state.Profiles.Count > 0)
         {
             var profiles = new ComboBox { ItemsSource = state.Profiles, SelectedIndex = 0 };
             var apply = new Button { Content = "Applica profilo" };
             apply.Click += async (_, _) => { if (profiles.SelectedItem is Profile p) await RunAsync(() => ExecuteAsync(new Shortcut { Action = "profile:" + p.Name })); };
-            overlayBody.Children.Add(profiles); overlayBody.Children.Add(apply);
+            body.Children.Add(profiles); body.Children.Add(apply);
         }
+        return body;
     }
 
-    private void OverlayClick(object sender, RoutedEventArgs e) => ToggleOverlay();
+    private void OverlayClick(object sender, RoutedEventArgs e) { if (overlay != null) overlay.Close(); else ToggleOverlay(false); }
     private async void SaveProfile(object sender, RoutedEventArgs e) => await RunAsync(async () =>
     {
         var name = ProfileName.Text.Trim();
@@ -391,6 +427,45 @@ public partial class MainWindow : Window
     private async void ApplyProfile(object sender, RoutedEventArgs e)
     {
         if (Profiles.SelectedItem is Profile profile) await RunAsync(() => ExecuteAsync(new Shortcut { Action = "profile:" + profile.Name }));
+    }
+    private async void ExportProfile(object sender, RoutedEventArgs e)
+    {
+        if (Profiles.SelectedItem is not Profile profile) { Status.Text = "Seleziona un profilo da esportare"; return; }
+        var dialog = new Microsoft.Win32.SaveFileDialog { Title = "Esporta profilo Hub", Filter = "Profilo Hub (*.hubprofile)|*.hubprofile", FileName = "profilo.hubprofile" };
+        if (dialog.ShowDialog(this) == true) await RunAsync(() =>
+        {
+            ProfileTransfer.Export(state, profile, dialog.FileName); Status.Text = "Profilo esportato"; return Task.CompletedTask;
+        });
+    }
+    private void ProfileSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (ProfileSummary == null) return;
+        ProfileCount.Text = state.Profiles.Count.ToString();
+        ProfileSummary.Children.Clear();
+        if (Profiles.SelectedItem is not Profile profile) { ProfileSummary.Children.Add(Text("Nessun profilo selezionato.", 12)); return; }
+        foreach (var id in profile.Audio.Keys.Union(profile.Controls.Keys))
+        {
+            var device = state.Devices.FirstOrDefault(d => d.Id == id);
+            if (device?.Id.StartsWith("windows:") == true) continue;
+            var row = new StackPanel();
+            row.Children.Add(Text(device?.Name ?? id, 14));
+            if (profile.Audio.TryGetValue(id, out var audio)) row.Children.Add(Text($"Volume {audio.Volume * 100:0}% · {(audio.Muted ? "Mute" : "Audio attivo")}", 12));
+            if (profile.Controls.TryGetValue(id, out var values))
+                foreach (var (key, value) in values)
+                    row.Children.Add(Text((device?.Controls.FirstOrDefault(c => c.Id == key)?.Label ?? key) + $" · {value:0.##}", 11));
+            ProfileSummary.Children.Add(new Border { Child = row, Margin = new Thickness(0, 0, 0, 10), Padding = new Thickness(12), CornerRadius = new CornerRadius(8), Background = (Brush)new BrushConverter().ConvertFromString("#1D2C3E")! });
+        }
+    }
+    private async void ImportProfile(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Title = "Importa profilo Hub", Filter = "Profilo Hub (*.hubprofile)|*.hubprofile" };
+        if (dialog.ShowDialog(this) == true) await RunAsync(() =>
+        {
+            var profile = ProfileTransfer.Import(state, dialog.FileName); state.Save();
+            Profiles.ItemsSource = null; Profiles.ItemsSource = state.Profiles; Profiles.SelectedItem = profile;
+            PopulateActions(); RenderList(); Status.Text = "Importato: " + profile.Name + ". Premi Applica profilo per usarlo.";
+            return Task.CompletedTask;
+        });
     }
     private void DeleteProfile(object sender, RoutedEventArgs e)
     {

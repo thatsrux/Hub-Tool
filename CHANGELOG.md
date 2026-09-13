@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-09-13
+
+- Verificata e completata l'iterazione interrotta: build senza errori e test su profili, richieste parzialmente fallite e import/export.
+- Limitato il catalogo alle periferiche d'interfaccia; esclusi CPU, bus, controller host, root hub e code radice. Raggruppate interfacce input e rimossi duplicati PnP dei monitor.
+- Ridisegnata la UI con header compatto, filtri, contatori, icone vettoriali e riepilogo dei profili. Rimossi slogan e testi promozionali.
+- Sostituito l'overlay con badge circolare 52 × 52 DIP, senza decorazioni native, trascinabile; apertura a moduli separati, Escape e posizione persistente.
+- Aggiunti controlli webcam standard senza cattura video e aggiornamenti audio via binding.
+- Eliminata Windows Forms; tray e monitor work area usano API native. Nessun asset raster o font superfluo; EXE autonomo compresso e variante EXE compatta.
+- Aggiunti test del filtro e del raggruppamento, rendering a dimensioni minime, verifica nativa della barra del titolo e benchmark senza immagini.
+
 ## 0.2.0 — 2026-09-13
 
 - Aggiunti controlli Windows diretti di mouse e tastiera, luminosità/contrasto DDC/CI, canali audio e dB.

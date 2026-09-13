@@ -13,6 +13,7 @@ public sealed class DeviceService : IDisposable
     public DeviceService(Settings settings)
     {
         State = settings;
+        State.Devices.RemoveAll(d => !PeripheralCatalog.IsPeripheral(d));
         foreach (var device in State.Devices) device.Connected = false;
     }
 
@@ -26,6 +27,8 @@ public sealed class DeviceService : IDisposable
             catch (Exception ex) { lock (Errors) Errors.Add("Input Windows: " + ex.Message); }
             try { list.AddRange(MonitorControls.Enumerate()); }
             catch (Exception ex) { lock (Errors) Errors.Add("Monitor: " + ex.Message); }
+            try { list.AddRange(CameraControls.Enumerate()); }
+            catch (Exception ex) { lock (Errors) Errors.Add("Webcam: " + ex.Message); }
             return list;
         });
         foreach (var endpoint in enumerator.EnumerateAudioEndPoints(DataFlow.All, DeviceState.Active))
@@ -41,6 +44,8 @@ public sealed class DeviceService : IDisposable
                         Kind = endpoint.DataFlow == DataFlow.Capture ? "Microfono" : "Uscita audio",
                         Connected = true, Volume = audio.MasterVolumeLevelScalar, Muted = audio.Mute
                     };
+                    try { device.AudioFormFactor = Convert.ToInt32(endpoint.Properties[PropertyKeys.PKEY_AudioEndpoint_FormFactor].Value); }
+                    catch (Exception) { device.AudioFormFactor = -1; }
                     var range = audio.VolumeRange;
                     if (range.MaxDecibels > range.MinDecibels)
                     {
@@ -58,18 +63,27 @@ public sealed class DeviceService : IDisposable
                 catch (Exception ex) { Errors.Add(endpoint.ID + ": " + ex.Message); }
             }
         }
+        found = PeripheralCatalog.Prepare(found);
+        foreach (var current in found.Where(d => d.PhysicalId.Length > 0))
+        {
+            var old = State.Devices.FirstOrDefault(d => d.Id.Equals(current.PhysicalId, StringComparison.OrdinalIgnoreCase));
+            if (old == null) continue;
+            var existing = State.Devices.FirstOrDefault(d => d.Id.Equals(current.Id, StringComparison.OrdinalIgnoreCase));
+            if (existing == null) old.Id = current.Id;
+            else { existing.Overlay |= old.Overlay; State.Devices.Remove(old); }
+            foreach (var profile in State.Profiles)
+            {
+                if (profile.Controls.Remove(current.PhysicalId, out var controls)) profile.Controls.TryAdd(current.Id, controls);
+                if (profile.Audio.Remove(current.PhysicalId, out var audio)) profile.Audio.TryAdd(current.Id, audio);
+            }
+            foreach (var shortcut in State.Shortcuts.Where(s => s.DeviceId == current.PhysicalId)) shortcut.DeviceId = current.Id;
+        }
         var restore = DeviceInventory.Merge(State.Devices, found);
+        Errors.AddRange(found.Where(d => d.Error.Length > 0).Select(d => d.Name + ": " + d.Error));
         foreach (var device in restore)
         {
-            // Capture before SetAudio refreshes channel state from Windows.
-            var values = device.Values.ToArray();
-            try
-            {
-                if (device.Volume.HasValue) SetAudio(device, device.Volume.Value, device.Muted);
-                foreach (var (key, value) in values)
-                    if (key != "decibels") await SetControlAsync(device, key, value);
-            }
-            catch (Exception ex) { device.Error = "Ripristino incompleto: " + ex.Message; Errors.Add(device.Name + ": " + device.Error); }
+            var failures = await FlushAsync(device);
+            Errors.AddRange(failures.Select(error => device.Name + ": " + error));
         }
         State.Save();
         UpdateAudioSubscriptions();
@@ -103,12 +117,37 @@ public sealed class DeviceService : IDisposable
         device.Values["decibels"] = endpoint.AudioEndpointVolume.MasterVolumeLevel;
         for (int i = 0; i < endpoint.AudioEndpointVolume.Channels.Count; i++)
             device.Values["channel:" + i] = endpoint.AudioEndpointVolume.Channels[i].VolumeLevelScalar * 100;
+        device.NotifyValues();
     }
 
     public void SetAudio(Device device, float volume, bool mute)
     {
         if (!float.IsFinite(volume)) throw new ArgumentOutOfRangeException(nameof(volume));
         volume = Math.Clamp(volume, 0, 1);
+        device.Pending ??= device.Connected ? new DeviceRequest() : DeviceRequest.Snapshot(device);
+        if (!device.Connected && device.Volume is float previous && previous != volume)
+        {
+            foreach (var key in device.Pending.Controls.Keys.Where(k => k.StartsWith("channel:")).ToArray())
+                device.Pending.Controls[key] = previous > 0 ? Math.Clamp(device.Pending.Controls[key] * volume / previous, 0, 100) : volume * 100;
+        }
+        device.Pending.Audio = new AudioSetting { Volume = volume, Muted = mute };
+        device.Pending.Controls.Remove("decibels");
+        State.Save();
+        if (!device.Connected)
+        {
+            device.Volume = volume; device.Muted = mute; device.Restore = true; State.Save(); return;
+        }
+        try
+        {
+            WriteAudio(device, volume, mute);
+            device.Pending.Audio = null;
+            if (device.Pending.Controls.Count == 0) device.Pending = null;
+        }
+        finally { State.Save(); }
+    }
+
+    private void WriteAudio(Device device, float volume, bool mute)
+    {
         if (device.Connected)
         {
             using var endpoint = enumerator.GetDevice(device.Id[6..]);
@@ -117,7 +156,6 @@ public sealed class DeviceService : IDisposable
         }
         device.Volume = volume; device.Muted = mute;
         if (device.Connected) ReadAudio(device);
-        else device.Restore = true;
     }
 
     public async Task SetControlAsync(Device device, string key, double value)
@@ -126,10 +164,36 @@ public sealed class DeviceService : IDisposable
             ?? throw new NotSupportedException("Controllo non esposto: " + key);
         if (!double.IsFinite(value) || value < control.Min || value > control.Max)
             throw new ArgumentOutOfRangeException(nameof(value));
+        device.Pending ??= device.Connected ? new DeviceRequest() : DeviceRequest.Snapshot(device);
+        if (key == "decibels")
+            foreach (var channel in device.Pending.Controls.Keys.Where(k => k.StartsWith("channel:")).ToArray()) device.Pending.Controls.Remove(channel);
+        device.Pending.Controls[key] = value;
+        State.Save();
+        if (!device.Connected) { device.Values[key] = value; device.Restore = true; State.Save(); return; }
+        try
+        {
+            await WriteControlAsync(device, key, value);
+            device.Pending.Controls.Remove(key);
+            if (device.Pending.Audio == null && device.Pending.Controls.Count == 0) device.Pending = null;
+        }
+        finally { State.Save(); }
+    }
+
+    private async Task WriteControlAsync(Device device, string key, double value)
+    {
+        var control = device.Controls.FirstOrDefault(c => c.Id == key) ?? throw new NotSupportedException("Controllo non esposto: " + key);
+        if (!double.IsFinite(value) || value < control.Min || value > control.Max) throw new ArgumentOutOfRangeException(nameof(value));
         if (device.Connected)
         {
             if (device.Id.StartsWith("windows:")) InputControls.Set(device.Id, key, value);
+            else if (device.Kind is "Keyboard" or "Mouse") InputControls.Set(device.Kind == "Keyboard" ? InputControls.KeyboardId : InputControls.MouseId, key, value);
             else if (device.Id.StartsWith("monitor:")) await Task.Run(() => MonitorControls.Set(device.Id, key, value));
+            else if (device.Id.StartsWith("camera:"))
+            {
+                device.Values = await Task.Run(() => CameraControls.Set(device.Id, key, value));
+                device.NotifyValues();
+                return;
+            }
             else if (device.Id.StartsWith("audio:"))
             {
                 using var endpoint = enumerator.GetDevice(device.Id[6..]);
@@ -138,45 +202,61 @@ public sealed class DeviceService : IDisposable
                     endpoint.AudioEndpointVolume.Channels[index].VolumeLevelScalar = (float)value / 100;
                 else throw new NotSupportedException(key);
                 ReadAudio(device);
+                return;
             }
             else throw new NotSupportedException("Provider assente per " + device.Kind);
         }
-        else device.Restore = true;
         device.Values[key] = value;
+        device.NotifyValues();
     }
 
-    public Profile Capture(string name) => new()
+    public Profile Capture(string name)
     {
-        Name = name,
-        Audio = State.Devices.Where(d => d.Volume.HasValue).ToDictionary(d => d.Id,
-            d => new AudioSetting { Volume = d.Volume!.Value, Muted = d.Muted }),
-        Controls = State.Devices.Where(d => d.Values.Count > 0).ToDictionary(d => d.Id,
-            d => d.Values.Where(kv => kv.Key != "decibels").ToDictionary(kv => kv.Key, kv => kv.Value))
-    };
+        var profile = new Profile { Name = name };
+        foreach (var device in State.Devices.Where(PeripheralCatalog.IsVisible))
+        {
+            var request = DeviceRequest.Snapshot(device);
+            if (device.Pending is { } pending)
+            {
+                if (pending.Audio is { } audio) request.Audio = new AudioSetting { Volume = audio.Volume, Muted = audio.Muted };
+                foreach (var (key, value) in pending.Controls) request.Controls[key] = value;
+                if (pending.Controls.ContainsKey("decibels"))
+                    foreach (var key in request.Controls.Keys.Where(k => k.StartsWith("channel:")).ToArray()) request.Controls.Remove(key);
+            }
+            if (request.Audio != null) profile.Audio[device.Id] = request.Audio;
+            if (request.Controls.Count > 0) profile.Controls[device.Id] = request.Controls;
+        }
+        return profile;
+    }
 
     public async Task<List<string>> ApplyAsync(Profile profile)
     {
         var failures = new List<string>();
-        foreach (var (id, value) in profile.Audio)
+        foreach (var id in profile.Audio.Keys.Union(profile.Controls.Keys))
         {
-            var device = State.Devices.FirstOrDefault(d => d.Id == id);
+            var device = State.Devices.FirstOrDefault(d => StringComparer.OrdinalIgnoreCase.Equals(d.Id, id));
             if (device == null) { failures.Add("Dispositivo sconosciuto: " + id); continue; }
-            try { SetAudio(device, value.Volume, value.Muted); device.Restore = true; }
-            catch (Exception ex) { failures.Add(device.Name + ": " + ex.Message); }
-        }
-        foreach (var (id, controls) in profile.Controls)
-        {
-            var device = State.Devices.FirstOrDefault(d => d.Id == id);
-            if (device == null) { failures.Add("Dispositivo sconosciuto: " + id); continue; }
-            foreach (var (key, value) in controls)
+            device.Pending = new DeviceRequest
             {
-                try { await SetControlAsync(device, key, value); device.Restore = true; }
-                catch (Exception ex) { failures.Add(device.Name + " / " + key + ": " + ex.Message); }
+                Audio = profile.Audio.TryGetValue(id, out var audio) ? new AudioSetting { Volume = audio.Volume, Muted = audio.Muted } : null,
+                Controls = profile.Controls.TryGetValue(id, out var values) ? new Dictionary<string, double>(values) : new()
+            };
+            device.Restore = true;
+            State.Save();
+            if (!device.Connected)
+            {
+                if (device.Pending.Audio is { } target) { device.Volume = target.Volume; device.Muted = target.Muted; }
+                foreach (var (key, value) in device.Pending.Controls) device.Values[key] = value;
             }
+            var errors = await FlushAsync(device);
+            failures.AddRange(errors.Select(error => device.Name + ": " + error));
         }
         State.Save();
         return failures;
     }
+
+    private Task<List<string>> FlushAsync(Device device) => RequestApplier.ApplyAsync(device,
+        audio => WriteAudio(device, audio.Volume, audio.Muted), (key, value) => WriteControlAsync(device, key, value));
 
     public void Dispose()
     {
@@ -201,9 +281,12 @@ public static class DeviceInventory
             }
             device.Name = current.Name; device.Kind = current.Kind; device.Connected = true;
             device.Controls = current.Controls; device.Manufacturer = current.Manufacturer; device.Driver = current.Driver;
+            device.AudioFormFactor = current.AudioFormFactor; device.ProductName = current.ProductName;
+            device.ContainerId = current.ContainerId; device.PhysicalId = current.PhysicalId;
             device.Error = current.Error;
-            if (device.Restore && !connected.Contains(device.Id)) restore.Add(device);
-            else { device.Volume = current.Volume; device.Muted = current.Muted; device.Values = current.Values; }
+            if (device.Restore && !connected.Contains(device.Id)) device.Pending ??= DeviceRequest.Snapshot(device);
+            if (device.Pending != null) restore.Add(device);
+            device.Volume = current.Volume; device.Muted = current.Muted; device.Values = current.Values;
         }
         return restore;
     }

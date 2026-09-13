@@ -8,14 +8,16 @@ public partial class App : System.Windows.Application
 {
     private Mutex? instance;
     public static string? PreviewDirectory { get; private set; }
+    public static bool BenchmarkOnly { get; private set; }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindow(string? className, string title);
     [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr window, uint message, IntPtr w, IntPtr l);
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        if (e.Args.Length == 2 && e.Args[0] == "--preview")
+        if (e.Args.Length == 2 && e.Args[0] is "--preview" or "--benchmark")
         {
+            BenchmarkOnly = e.Args[0] == "--benchmark";
             PreviewDirectory = Path.GetFullPath(e.Args[1]);
             Directory.CreateDirectory(PreviewDirectory);
             Settings.DataDirectoryOverride = Path.Combine(PreviewDirectory, "isolated-data-" + Guid.NewGuid().ToString("N"));
