@@ -17,6 +17,15 @@
 - Non sono state certificate memoria minima, consumo CPU minimo, compatibilità hardware universale o assenza di tutte le vulnerabilità.
 - Firma Authenticode, certificazione, installer MSIX e supporto ARM64 restano aperti.
 
+## Distribuzione verificata
+
+- Repository pubblica: https://github.com/thatsrux/Hub-Tool
+- Pipeline release del tag `v0.2.0`: https://github.com/thatsrux/Hub-Tool/actions/runs/34775424952 — completata con successo, test e packaging inclusi.
+- Release pubblica (non draft), marcata prerelease: https://github.com/thatsrux/Hub-Tool/releases/tag/v0.2.0
+- Asset presenti: EXE autonomo x64, ZIP portable, ZIP compatto e SHA256SUMS. ZIP compatto circa 295 KiB; ZIP portable circa 64,7 MiB; EXE circa 154,6 MiB.
+- EXE riscaricato da GitHub: SHA-256 `90478f804ad68f5adb5db4fe330b90da228c235acb2a9d9a9f8eea0c55a0f5cc`, corrispondente al manifesto pubblicato.
+- Il binario riscaricato ha avviato la discovery, renderizzato quattro pagine e terminato la diagnostica senza errori. Campione dopo rendering: 15,01 s, 0,6875 s CPU, 181,81 MiB working set, 116,08 MiB privati.
+
 ## Riproduzione
 
 Eseguire `HubTool.Tests` su Windows. La modalità standard scrive solo preferenze temporanee e usa dispositivi simulati per le prove di merge/offline. `--hardware-read` legge le API reali senza modificare impostazioni. Il comando `--preview` dell'app scrive immagini e metriche in una cartella scelta, con una nuova cartella dati isolata per ogni esecuzione.

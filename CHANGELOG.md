@@ -10,6 +10,7 @@
 - Ridotte le dipendenze al solo NAudio.Wasapi/Core; aggiunti test, rendering diagnostico, misure preliminari e workflow GitHub.
 - Preparati EXE autonomo, ZIP portable/compatto, licenze e checksum. La release resta sperimentale; copertura universale e consumi minimi non sono dimostrati.
 - Pubblicata la repository `thatsrux/Hub-Tool`; reso esplicito l'elenco asset del workflow e validati i percorsi di packaging.
+- Verificata la pipeline GitHub e riscaricato l'EXE della prerelease: hash corrispondente, avvio e rendering riusciti. Registrati i divari residui in `docs/REMAINING-WORK.md`.
 
 ## 0.1.0 — 2026-09-13 (in sviluppo)
 
