@@ -12,5 +12,5 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - run: dotnet run --project HubTool.Tests/HubTool.Tests.csproj -c Release
-      - run: dotnet list HubTool/HubTool.csproj package --vulnerable --include-transitive
+      - run: dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release
+      - run: dotnet list src/HubTool/HubTool.csproj package --vulnerable --include-transitive

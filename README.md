@@ -2,11 +2,13 @@
 
 Un centro di controllo nativo per Windows: dispositivi, audio, profili e shortcut, con un overlay discreto.
 
-**0.3.0 è una prerelease.** L'elenco riguarda le periferiche d'interfaccia: audio, monitor, tastiere, mouse, videocamere, stampanti, scanner e hub USB esterni. Non include CPU, bus, controller host o altri nodi interni. La copertura dei controlli è descritta nella [matrice delle capacità](docs/CAPABILITIES.md).
+**0.3.1 è una prerelease.** L'elenco riguarda le periferiche d'interfaccia: audio, monitor, tastiere, mouse, videocamere, stampanti, scanner e hub USB esterni. Non include CPU, bus, controller host o altri nodi interni. La copertura dei controlli è descritta nella [matrice delle capacità](docs/CAPABILITIES.md).
 
 ## Download
 
 [Release GitHub](https://github.com/thatsrux/Hub-Tool/releases) · [Codice sorgente](https://github.com/thatsrux/Hub-Tool)
+
+Nel repository, `HubTool.exe` si trova direttamente nella cartella principale ed è la build Windows x64 autonoma: basta fare doppio clic e non serve installare .NET.
 
 - `HubTool-…-win-x64-compact.exe`: scelta consigliata su PC con .NET 8 Desktop Runtime; circa 670 KB, senza asset esterni.
 - `HubTool-…-win-x64.exe`: eseguibile autonomo compresso, senza installazione di .NET.
@@ -54,10 +56,10 @@ Campione locale 0.3 con runtime condiviso, a riposo e senza rendering diagnostic
 Su Windows con SDK .NET 8:
 
 ```powershell
-dotnet build HubTool/HubTool.csproj -c Release
-dotnet run --project HubTool.Tests/HubTool.Tests.csproj -c Release
-dotnet run --project HubTool.Tests/HubTool.Tests.csproj -c Release -- --hardware-read
-./scripts/package.ps1 -Version 0.3.0
+dotnet build src/HubTool/HubTool.csproj -c Release
+dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release
+dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release -- --hardware-read
+./scripts/package.ps1 -Version 0.3.1
 ```
 
 I test ordinari verificano persistenza, merge dell'inventario, riconnessione e profili offline senza cambiare hardware. `--hardware-read` aggiunge letture reali di input, audio e monitor. [Verifica e limiti](docs/VERIFICATION.md).

@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $hubRoot = Split-Path $PSScriptRoot -Parent
-$hubAssetDir = Join-Path $hubRoot 'HubTool/Assets'
+$hubAssetDir = Join-Path $hubRoot 'src/HubTool/Assets'
 New-Item -ItemType Directory -Path $hubAssetDir -Force | Out-Null
 $hubFrames = @()
 foreach ($hubSize in @(16,32,48,64,128,256)) {

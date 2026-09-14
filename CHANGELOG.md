@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 — 2026-09-14
+
+- Riordinato il repository: applicazione in `src/`, verifiche in `tests/` e risorse di progetto nelle cartelle dedicate.
+- Aggiunto `HubTool.exe` autonomo direttamente nella cartella principale, con nome stabile e senza dipendenza dal runtime .NET installato.
+- Aggiornati packaging, documentazione e workflow GitHub ai nuovi percorsi.
+
 ## 0.3.0 — 2026-09-13
 
 - Verificata e completata l'iterazione interrotta: build senza errori e test su profili, richieste parzialmente fallite e import/export.

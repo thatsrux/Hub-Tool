@@ -12,7 +12,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - run: dotnet run --project HubTool.Tests/HubTool.Tests.csproj -c Release
+      - run: dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release
       - name: Build packages
         shell: pwsh
         run: |
