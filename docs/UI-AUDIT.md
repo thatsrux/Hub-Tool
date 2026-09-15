@@ -10,7 +10,7 @@ Richiesta corrente: migliorare nettamente app e overlay, usare una barra inizial
 - Icone vettoriali per audio/cuffie, microfoni, tastiere, mouse, monitor, webcam, hub USB, stampanti/scanner e storage. Nessun pacchetto di icone, font o immagine aggiuntivo.
 - Verifica visuale tramite rendering delle cinque pagine, layout minimo 900 × 620, scheda videocamera, barra overlay e pannello dispositivo. Verifica della finestra nativa: WS_CAPTION assente.
 - Apertura ed Escape esercitati sui gestori WPF reali; ancoraggio preservato. Verificate sia la barra orizzontale sia quella verticale, con tre dispositivi e il pulsante Hub.
-- Acquisito e analizzato un fotogramma reale 3840 × 2160 dalla EMEET SmartCam tramite callback AVICap; l’anteprima resta un HWND nativo e non compare nel bitmap WPF diagnostico.
+- Acquisito e analizzato un fotogramma reale dalla EMEET SmartCam tramite callback AVICap; viene decodificato a 960 × 540 e mostrato come immagine WPF, quindi compare anche nel rendering diagnostico senza bordi o host nativi instabili.
 - Overlay verticale verificato con sette icone: dodici ricostruzioni consecutive generano lo stesso hash grafico. Sul bordo destro, l’espansione mantiene fisso il bordo e colloca il pannello direttamente a sinistra.
 - Hover verificato spostando realmente il puntatore sulla prima icona: il bordo arrotondato resta completo e la dimensione desiderata del contenuto rientra nella finestra senza clipping.
 - Eliminate le dipendenze dirette da Windows Forms e System.Drawing; resta un solo asset, l'icona eseguibile multirisoluzione (3.719 byte).

@@ -35,6 +35,8 @@ public partial class MainWindow : Window
     private CameraPreviewHost? activeCameraPreview;
 
     private sealed record ActionOption(string Label, string Action, string DeviceId = "", string Control = "");
+    private sealed record CameraEnhanceResult(CameraFrameAnalysis Frame, Dictionary<string, double> Recommendations,
+        int Applied, int Verified, List<string> Errors);
 
     public MainWindow()
     {
@@ -69,6 +71,7 @@ public partial class MainWindow : Window
             debounce.Stop(); debounce.Start();
         }));
         debounce.Tick += async (_, _) => { debounce.Stop(); await RunAsync(RefreshCore); };
+        Closed += (_, _) => { activeCameraPreview?.Dispose(); activeCameraPreview = null; };
         Loaded += async (_, _) =>
         {
             handle = new WindowInteropHelper(this).Handle;
@@ -312,19 +315,9 @@ public partial class MainWindow : Window
         enhance.Click += async (_, _) => await RunAsync(async () =>
         {
             Status.Text = "Analisi intelligente del fotogramma…";
-            var frame = preview.CaptureAnalysis(); var recommendations = CameraControls.RecommendEnhancement(device, frame);
-            preview.Suspend(); var errors = new List<string>(); int applied = 0;
-            try
-            {
-                foreach (var (key, value) in recommendations)
-                {
-                    try { await service.SetControlAsync(device, key, value); applied++; }
-                    catch (Exception ex) { errors.Add((device.Controls.FirstOrDefault(c => c.Id == key)?.Label ?? key) + ": " + ex.Message); }
-                }
-            }
-            finally { preview.Resume(); }
-            state.Save();
-            Status.Text = errors.Count == 0 ? $"Immagine ottimizzata · {applied} parametri" : $"Ottimizzati {applied} parametri · " + string.Join("; ", errors);
+            var result = await EnhanceCameraAsync(device, preview);
+            Status.Text = result.Errors.Count == 0 ? $"Immagine ottimizzata · {result.Applied} parametri"
+                : $"Ottimizzati {result.Applied} parametri · " + string.Join("; ", result.Errors);
         });
         var resetCamera = new Button { Content = "Ripristina default" };
         resetCamera.Click += async (_, _) => await RunAsync(async () =>
@@ -372,6 +365,31 @@ public partial class MainWindow : Window
         };
         profileActions.Children.Add(save); profileActions.Children.Add(apply); profileActions.Children.Add(delete); studio.Children.Add(profileActions);
         panel.Children.Add(new Border { Child = studio, Background = (Brush)FindResource("PanelRaised"), BorderBrush = (Brush)FindResource("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Padding = new Thickness(14), Margin = new Thickness(0, 0, 0, 16) });
+    }
+
+    private async Task<CameraEnhanceResult> EnhanceCameraAsync(Device device, CameraPreviewHost preview)
+    {
+        var frame = preview.CaptureAnalysis();
+        var recommendations = CameraControls.RecommendEnhancement(device, frame);
+        var errors = new List<string>(); int applied = 0, verified = 0;
+        preview.Suspend();
+        try
+        {
+            foreach (var (key, value) in recommendations)
+            {
+                try
+                {
+                    await service.SetControlAsync(device, key, value); applied++;
+                    var control = device.Controls.First(c => c.Id == key);
+                    if (device.Values.TryGetValue(key, out var actual) && Math.Abs(actual - value) <= Math.Max(.001, control.Step / 2)) verified++;
+                    else errors.Add(control.Label + ": il driver non ha confermato il valore");
+                }
+                catch (Exception ex) { errors.Add((device.Controls.FirstOrDefault(c => c.Id == key)?.Label ?? key) + ": " + ex.Message); }
+            }
+        }
+        finally { preview.Resume(); }
+        state.Save();
+        return new(frame, recommendations, applied, verified, errors);
     }
 
     private async Task SetLightColor(Device device, string hex)
@@ -593,6 +611,29 @@ public partial class MainWindow : Window
         { Left = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth + 100, Top = SystemParameters.VirtualScreenTop + 100 };
     }
     internal CameraFrameAnalysis? CaptureCameraAnalysisForDiagnostics() => activeCameraPreview?.CaptureAnalysis();
+    internal (bool HasFrame, int Width, int Height) CameraPreviewStateForDiagnostics() =>
+        (activeCameraPreview?.HasFrame == true, activeCameraPreview?.FramePixelWidth ?? 0, activeCameraPreview?.FramePixelHeight ?? 0);
+    internal async Task<CameraEnhanceDiagnostic> TestCameraEnhanceForDiagnosticsAsync()
+    {
+        if (App.PreviewDirectory == null) throw new InvalidOperationException("Richiede preferenze isolate");
+        var preview = activeCameraPreview ?? throw new InvalidOperationException("Anteprima videocamera non attiva");
+        var device = DeviceList.SelectedItem as Device ?? throw new InvalidOperationException("Videocamera non selezionata");
+        var original = device.Values.Where(v => v.Key.StartsWith("camera:") || v.Key.StartsWith("video:")).ToDictionary();
+        var result = await EnhanceCameraAsync(device, preview);
+        var restoreErrors = new List<string>();
+        preview.Suspend();
+        try
+        {
+            foreach (var key in original.Keys.Where(k => k.EndsWith(":auto", StringComparison.Ordinal) && original.ContainsKey(k[..^5])))
+                try { await service.SetControlAsync(device, key, 0); } catch (Exception ex) { restoreErrors.Add(key + ": " + ex.Message); }
+            foreach (var (key, value) in original.Where(v => !v.Key.EndsWith(":auto", StringComparison.Ordinal)))
+                try { await service.SetControlAsync(device, key, value); } catch (Exception ex) { restoreErrors.Add(key + ": " + ex.Message); }
+            foreach (var (key, value) in original.Where(v => v.Key.EndsWith(":auto", StringComparison.Ordinal)))
+                try { await service.SetControlAsync(device, key, value); } catch (Exception ex) { restoreErrors.Add(key + ": " + ex.Message); }
+        }
+        finally { preview.Resume(); }
+        return new(result.Recommendations.Count, result.Applied, result.Verified, result.Errors, restoreErrors);
+    }
     internal void SetOverlayOrientationForDiagnostics(string orientation)
     {
         if (App.PreviewDirectory == null) throw new InvalidOperationException("Richiede preferenze isolate");
@@ -801,3 +842,6 @@ public partial class MainWindow : Window
         public void OnPropertyValueChanged(string id, PropertyKey key) => changed();
     }
 }
+
+internal readonly record struct CameraEnhanceDiagnostic(int Recommended, int Applied, int Verified,
+    List<string> Errors, List<string> RestoreErrors);

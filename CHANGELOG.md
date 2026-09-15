@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3 — 2026-09-15
+
+- Sostituito il fragile riquadro AVICap incorporato con una semplice anteprima a fotogrammi WPF 960 × 540, stabile e visibile anche nel rendering dell’app.
+- Limitato l’aggiornamento dell’anteprima a quattro fotogrammi al secondo e arrestata la cattura appena si lascia la scheda della videocamera.
+- Enhance ora verifica ogni valore rileggendolo dal driver; la prova hardware ha applicato 10 regolazioni su 10 e ripristinato le impostazioni iniziali senza errori.
+
 ## 0.5.2 — 2026-09-15
 
 - Corretto il ritaglio del bordo hover delle icone: la misura dell’overlay ora include integralmente margini, padding e bordo sull’asse corto.

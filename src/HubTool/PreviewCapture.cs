@@ -38,6 +38,8 @@ internal static class PreviewCapture
         {
             CameraFrameAnalysis? cameraAnalysis = null;
             string cameraAnalysisError = "";
+            CameraEnhanceDiagnostic? cameraEnhance = null;
+            var cameraPreviewWidth = 0; var cameraPreviewHeight = 0;
             var tabs = (TabControl)window.FindName("Pages");
             for (int i = 0; i < tabs.Items.Count; i++)
             {
@@ -61,11 +63,32 @@ internal static class PreviewCapture
                 if (camera != null)
                 {
                     cameraList.SelectedItem = camera; await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    await Task.Delay(1500);
+                    var previewState = window.CameraPreviewStateForDiagnostics();
+                    cameraPreviewWidth = previewState.Width; cameraPreviewHeight = previewState.Height;
+                    if (!previewState.HasFrame || cameraPreviewWidth < 1 || cameraPreviewHeight < 1)
+                        throw new InvalidOperationException("L’anteprima videocamera non contiene un fotogramma visibile");
                     Capture(window, "camera-detail");
-                    await Task.Delay(1200);
-                    try { cameraAnalysis = window.CaptureCameraAnalysisForDiagnostics(); } catch (Exception ex) { cameraAnalysisError = ex.Message; }
+                    try
+                    {
+                        cameraAnalysis = window.CaptureCameraAnalysisForDiagnostics();
+                        cameraEnhance = await window.TestCameraEnhanceForDiagnosticsAsync();
+                        if (cameraEnhance.Value.Recommended < 1 || cameraEnhance.Value.Applied != cameraEnhance.Value.Recommended ||
+                            cameraEnhance.Value.Verified != cameraEnhance.Value.Recommended || cameraEnhance.Value.Errors.Count > 0 || cameraEnhance.Value.RestoreErrors.Count > 0)
+                            throw new InvalidOperationException("Enhance non è stato applicato e ripristinato integralmente");
+                    }
+                    catch (Exception ex) { cameraAnalysisError = ex.Message; }
                 }
             }
+            File.WriteAllText(Path.Combine(App.PreviewDirectory, "camera-result.json"), JsonSerializer.Serialize(new
+            {
+                CameraPreviewVisible = cameraPreviewWidth > 0 && cameraPreviewHeight > 0,
+                CameraPreviewWidth = cameraPreviewWidth, CameraPreviewHeight = cameraPreviewHeight,
+                CameraFrameAnalyzed = cameraAnalysis.HasValue, CameraMeanLuma = cameraAnalysis?.MeanLuma,
+                CameraEnhanceRecommended = cameraEnhance?.Recommended, CameraEnhanceApplied = cameraEnhance?.Applied,
+                CameraEnhanceVerified = cameraEnhance?.Verified, CameraEnhanceErrors = cameraEnhance?.Errors,
+                CameraRestoreErrors = cameraEnhance?.RestoreErrors, CameraAnalysisError = cameraAnalysisError
+            }));
             using var overlay = new DiagnosticOverlay(window.CreateDiagnosticOverlay());
             overlay.Window.Show();
             overlay.Window.KeepOnScreen();
@@ -120,7 +143,11 @@ internal static class PreviewCapture
             File.WriteAllText(Path.Combine(App.PreviewDirectory, "result.json"), JsonSerializer.Serialize(new
             { Pages = tabs.Items.Count, CompactIcons = overlay.Window.IconCount, HorizontalLayout = true, VerticalLayout = true, StableIconPasses = 12,
                 HoverBorderVisible = true, RightDockOpensLeft = true, NativeCaption = false, ClickExpanded = true, EscapeCollapsed = true, AnchorPreserved = true,
-                CameraFrameAnalyzed = cameraAnalysis.HasValue, CameraMeanLuma = cameraAnalysis?.MeanLuma, CameraAnalysisError = cameraAnalysisError, Completed = true }));
+                CameraPreviewVisible = cameraPreviewWidth > 0 && cameraPreviewHeight > 0, CameraPreviewWidth = cameraPreviewWidth, CameraPreviewHeight = cameraPreviewHeight,
+                CameraFrameAnalyzed = cameraAnalysis.HasValue, CameraMeanLuma = cameraAnalysis?.MeanLuma, CameraEnhanceRecommended = cameraEnhance?.Recommended,
+                CameraEnhanceApplied = cameraEnhance?.Applied, CameraEnhanceVerified = cameraEnhance?.Verified,
+                CameraEnhanceErrors = cameraEnhance?.Errors, CameraRestoreErrors = cameraEnhance?.RestoreErrors,
+                CameraAnalysisError = cameraAnalysisError, Completed = true }));
         }
         window.Hide();
         if (App.FastPreview) { System.Windows.Application.Current.Shutdown(); return; }
