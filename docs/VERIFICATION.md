@@ -3,7 +3,7 @@
 ## Eseguito localmente
 
 - Build Release con .NET SDK 8.0.425: zero errori e zero avvisi.
-- 38 controlli con `--hardware-read`: persistenza, inventario, profili, dispositivo dimenticato, protocollo QuikLight, direzione luminosità, raccomandazioni camera, input, audio, monitor e rilevamento luci; tutti passati.
+- 35 controlli ordinari: persistenza, inventario, profili, dispositivo dimenticato, protocollo QuikLight, direzione luminosità, raccomandazioni camera e toggle shortcut 0→1→0; tutti passati. Le letture hardware aggiungono i controlli di input, audio, monitor e luci.
 - Scrittura reale invariata con DX Light e Hub chiusi: luminosità e colore statico accettati dal controller USB `1A86:FE07`, senza errori.
 - Rendering delle cinque pagine WPF, layout compatto, overlay orizzontale/verticale e pannello espanso completato. Verificati apertura, Escape, ancoraggio e assenza della barra del titolo.
 - Anteprima collegata alla EMEET SmartCam e resa come immagine WPF 960 × 540; il fotogramma è visibile anche nella cattura della UI. Enhance ha proposto 10 valori, li ha applicati e riletti tutti dal driver, poi ha ripristinato integralmente i valori iniziali senza errori.

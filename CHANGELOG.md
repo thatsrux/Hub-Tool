@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.4 — 2026-09-15
+
+- Aggiunta alle shortcut l’azione attiva/disattiva per Eco microfono e per ogni altro controllo binario 0/1.
+- Conservata l’azione imposta valore come scelta separata; il campo numerico viene nascosto quando si seleziona il toggle.
+- Il toggle parte sempre dallo stato corrente e conserva la destinazione anche se il dispositivo è scollegato.
+
 ## 0.5.3 — 2026-09-15
 
 - Sostituito il fragile riquadro AVICap incorporato con una semplice anteprima a fotogrammi WPF 960 × 540, stabile e visibile anche nel rendering dell’app.

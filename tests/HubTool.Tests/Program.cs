@@ -46,6 +46,18 @@ var fallbackDisplay = new Device
 AudioTopologyControls.RestoreDisplayState(fallbackDisplay);
 Check(fallbackDisplay.Values["sidetone:volume:10:0"] == 64 && fallbackDisplay.Values["sidetone:enabled:11"] == 0,
     "Sidetone fallback preserves volume while showing the disabled state");
+var toggleDevice = new Device
+{
+    Controls = [new("sidetone:enabled:11", "Eco microfono attivo", 0, 1, 1, Toggle: true),
+        new("binary", "Interruttore driver", 0, 1, 1), new("level", "Livello", 0, 100, 1)],
+    Values = new() { ["sidetone:enabled:11"] = 1, ["level"] = 30 }
+};
+Check(MainWindow.CanToggle(toggleDevice.Controls[0]) && MainWindow.CanToggle(toggleDevice.Controls[1]) && !MainWindow.CanToggle(toggleDevice.Controls[2])
+    && MainWindow.ToggleControlValue(toggleDevice, "sidetone:enabled:11") == 0,
+    "Binary controls can be toggled by shortcuts");
+toggleDevice.Values["sidetone:enabled:11"] = 0;
+Check(MainWindow.ToggleControlValue(toggleDevice, "sidetone:enabled:11") == 1,
+    "Control shortcuts toggle from off back to on");
 Check(CameraControls.PreferredDefaultFlags(3) == 1 && CameraControls.PreferredDefaultFlags(2) == 2,
     "Camera reset prefers automatic mode and falls back to manual mode");
 Check(MainWindow.SnapSliderValue(7.6, -10, 10, 3) == 8 && MainWindow.SnapSliderValue(99.9, 0, 90, 5) == 90,

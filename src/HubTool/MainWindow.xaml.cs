@@ -526,7 +526,12 @@ public partial class MainWindow : Window
                 choices.Add(new(device.Name + " · volume %", "set-volume", device.Id));
                 choices.Add(new(device.Name + " · mute", "toggle-device", device.Id));
             }
-            choices.AddRange(device.Controls.Select(c => new ActionOption(device.Name + " · " + c.Label, "set-control", device.Id, c.Id)));
+            foreach (var control in device.Controls)
+            {
+                choices.Add(new ActionOption(device.Name + " · " + control.Label + " · imposta valore", "set-control", device.Id, control.Id));
+                if (CanToggle(control))
+                    choices.Add(new ActionOption(device.Name + " · " + control.Label + " · attiva/disattiva", "toggle-control", device.Id, control.Id));
+            }
         }
         ActionChoice.ItemsSource = choices;
         ActionChoice.SelectedItem = choices.FirstOrDefault(c => c == selected) ?? choices.First();
@@ -544,10 +549,11 @@ public partial class MainWindow : Window
             var failures = await service.ApplyAsync(profile);
             Status.Text = failures.Count == 0 ? "Profilo applicato: " + profile.Name : string.Join("; ", failures);
         }
-        else if (action is "set-volume" or "toggle-device" or "set-control")
+        else if (action is "set-volume" or "toggle-device" or "set-control" or "toggle-control")
         {
             var device = state.Devices.FirstOrDefault(d => d.Id == shortcut.DeviceId) ?? throw new InvalidOperationException("Dispositivo non trovato");
             if (action == "set-control") await service.SetControlAsync(device, shortcut.Control, shortcut.Value);
+            else if (action == "toggle-control") await service.SetControlAsync(device, shortcut.Control, ToggleControlValue(device, shortcut.Control));
             else
             {
                 service.ReadAudio(device);
@@ -566,6 +572,18 @@ public partial class MainWindow : Window
                     action is "mute-input" or "mute-output" ? mute : device.Muted);
         }
         state.Save(); RenderList(); RenderOverlay();
+    }
+
+    internal static bool CanToggle(DeviceControl control) => control.Toggle ||
+        (Math.Abs(control.Min) < .001 && Math.Abs(control.Max - 1) < .001 && control.Step >= 1);
+
+    internal static double ToggleControlValue(Device device, string controlId)
+    {
+        var control = device.Controls.FirstOrDefault(c => c.Id == controlId)
+            ?? throw new NotSupportedException("Controllo non esposto: " + controlId);
+        if (!CanToggle(control)) throw new InvalidOperationException("Il controllo non è un interruttore");
+        var current = device.Values.GetValueOrDefault(controlId, control.Min);
+        return current > (control.Min + control.Max) / 2 ? control.Min : control.Max;
     }
 
     private void ToggleOverlay(bool focus = true)

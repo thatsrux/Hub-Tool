@@ -2,7 +2,7 @@
 
 Un centro di controllo nativo per Windows: dispositivi, audio, profili e shortcut, con un overlay discreto.
 
-**0.5.3 è una prerelease.** L'elenco riguarda le periferiche d'interfaccia: audio, monitor, tastiere, mouse, videocamere, illuminazione compatibile, stampanti, scanner e hub USB esterni. Non include CPU, bus, controller host o altri nodi interni. La copertura dei controlli è descritta nella [matrice delle capacità](docs/CAPABILITIES.md).
+**0.5.4 è una prerelease.** L'elenco riguarda le periferiche d'interfaccia: audio, monitor, tastiere, mouse, videocamere, illuminazione compatibile, stampanti, scanner e hub USB esterni. Non include CPU, bus, controller host o altri nodi interni. La copertura dei controlli è descritta nella [matrice delle capacità](docs/CAPABILITIES.md).
 
 ## Download
 
@@ -33,7 +33,7 @@ I binari non sono ancora firmati con un certificato Authenticode. Gli hash perme
 - Sincronizzare 54 zone LED con i bordi dello schermo, regolando fluidità, intensità dei colori e morbidezza delle transizioni.
 - Prendere automaticamente il controllo quando DX Light viene chiuso e riapplicare lo stato salvato, evitando che le luci restino spente. Hub e DX Light non accedono mai contemporaneamente al controller.
 - Salvare profili di audio, canali, input e monitor. I valori dei dispositivi assenti vengono conservati per la riconnessione.
-- Registrare shortcut globali per profili, singoli controlli, mute, volume o apertura di file/programmi con argomenti.
+- Registrare shortcut globali per profili, singoli controlli, mute, volume o apertura di file/programmi con argomenti. I controlli binari, come Eco microfono attivo, possono essere impostati a un valore preciso oppure alternati tra acceso e spento a ogni pressione.
 - Importare/esportare profili `.hubprofile`; l'importazione non applica automaticamente impostazioni o comandi.
 - Personalizzare l’overlay da una pagina dedicata: barra di sole icone orizzontale o verticale, dimensione, opacità, primo piano e compressione automatica. Ogni icona apre soltanto il proprio pannello; `Ctrl+Alt+H` mostra o nasconde la barra.
 - Aprire i pannelli Windows della categoria per le impostazioni non ancora integrate.
@@ -67,7 +67,7 @@ Su Windows con SDK .NET 8:
 dotnet build src/HubTool/HubTool.csproj -c Release
 dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release
 dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release -- --hardware-read
-./scripts/package.ps1 -Version 0.5.3
+./scripts/package.ps1 -Version 0.5.4
 ```
 
 I test ordinari verificano persistenza, protocollo luci, merge dell'inventario, riconnessione e profili offline senza cambiare hardware. `--hardware-read` aggiunge letture reali di input, audio, monitor e luci. `--light-write` esegue una scrittura invariata sul controller e va usato con DX Light e Hub chiusi. [Verifica e limiti](docs/VERIFICATION.md).
