@@ -58,6 +58,7 @@ public sealed class DeviceService : IDisposable
                         device.Controls.Add(new("channel:" + i, "Canale " + (i + 1), 0, 100, 1, "%"));
                         device.Values["channel:" + i] = audio.Channels[i].VolumeLevelScalar * 100;
                     }
+                    AudioTopologyControls.Discover(endpoint, device);
                     found.Add(device);
                 }
                 catch (Exception ex) { Errors.Add(endpoint.ID + ": " + ex.Message); }
@@ -117,6 +118,7 @@ public sealed class DeviceService : IDisposable
         device.Values["decibels"] = endpoint.AudioEndpointVolume.MasterVolumeLevel;
         for (int i = 0; i < endpoint.AudioEndpointVolume.Channels.Count; i++)
             device.Values["channel:" + i] = endpoint.AudioEndpointVolume.Channels[i].VolumeLevelScalar * 100;
+        AudioTopologyControls.Read(endpoint, device);
         device.NotifyValues();
     }
 
@@ -200,6 +202,7 @@ public sealed class DeviceService : IDisposable
                 if (key == "decibels") endpoint.AudioEndpointVolume.MasterVolumeLevel = (float)value;
                 else if (key.StartsWith("channel:") && int.TryParse(key[8..], out int index) && index >= 0 && index < endpoint.AudioEndpointVolume.Channels.Count)
                     endpoint.AudioEndpointVolume.Channels[index].VolumeLevelScalar = (float)value / 100;
+                else if (AudioTopologyControls.IsSidetone(key)) AudioTopologyControls.Set(endpoint, key, value);
                 else throw new NotSupportedException(key);
                 ReadAudio(device);
                 return;

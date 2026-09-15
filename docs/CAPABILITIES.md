@@ -1,9 +1,9 @@
-# Copertura effettiva — 0.3.1
+# Copertura effettiva — 0.3.2
 
 | Categoria | Rilevamento | Controlli diretti | Limiti |
 |---|---|---|---|
 | Plug and Play | Periferiche d'interfaccia; esclusi CPU, bus, host controller e root hub | Catalogo, icone, categorie e pannello specifico | I nodi interni non fanno parte dell'interfaccia richiesta |
-| Cuffie / speaker | Endpoint Core Audio attivi | Volume, mute, dB, singoli canali | EQ, surround e DSP proprietari non integrati |
+| Cuffie / speaker | Endpoint Core Audio attivi + topologia hardware | Volume, mute, dB, singoli canali; eco microfono/sidetone con volume e interruttore quando esposto | EQ, surround e altri DSP proprietari non integrati |
 | Microfoni | Endpoint Core Audio attivi | Volume, mute, dB, singoli canali | Il livello in dB non equivale necessariamente a gain analogico o boost hardware |
 | Mouse | PnP + preferenze Windows | Velocità, doppio clic, rotella, scambio pulsanti | Preferenze globali; DPI, polling rate, pulsanti firmware e RGB non integrati |
 | Tastiere | PnP + preferenze Windows | Velocità e ritardo ripetizione | Preferenze globali; rimappatura per dispositivo, macro e RGB non integrati |

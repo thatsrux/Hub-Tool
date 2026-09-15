@@ -3,7 +3,7 @@
   <Grid.RowDefinitions><RowDefinition Height="52"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <DockPanel Margin="0,0,0,12">
    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"><Button Content="Aggiorna" Click="RefreshClick" Padding="14,6"/><Button x:Name="OverlayToggle" Content="Overlay" Click="OverlayClick" Padding="14,6" Style="{StaticResource AccentButton}"/></StackPanel>
-   <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Border Background="#19423C" CornerRadius="8" Width="32" Height="32"><TextBlock Text="H" Foreground="{StaticResource Accent}" FontSize="21" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Hub Tool" FontSize="22" FontWeight="SemiBold" Margin="10,0" VerticalAlignment="Center"/><TextBlock Text="0.3" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/></StackPanel>
+   <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Border Background="#19423C" CornerRadius="8" Width="32" Height="32"><TextBlock Text="H" Foreground="{StaticResource Accent}" FontSize="21" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Hub Tool" FontSize="22" FontWeight="SemiBold" Margin="10,0" VerticalAlignment="Center"/><TextBlock x:Name="AppVersion" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/></StackPanel>
   </DockPanel>
   <TabControl x:Name="Pages" Grid.Row="1" Background="Transparent" BorderThickness="0">
    <TabItem Header="Dispositivi"><Grid Margin="0,14,0,0"><Grid.RowDefinitions><RowDefinition Height="58"/><RowDefinition Height="58"/><RowDefinition/></Grid.RowDefinitions>

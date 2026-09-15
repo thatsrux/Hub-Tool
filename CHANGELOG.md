@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 — 2026-09-15
+
+- Aggiunti volume e interruttore dell'eco microfono/sidetone nella scheda dell'uscita audio associata.
+- Rilevato il percorso microfono nella topologia hardware Windows; i controlli compaiono solo quando sono realmente esposti dal driver.
+- Inclusi i nuovi valori in profili, shortcut e ripristino alla riconnessione.
+
 ## 0.3.1 — 2026-09-14
 
 - Riordinato il repository: applicazione in `src/`, verifiche in `tests/` e risorse di progetto nelle cartelle dedicate.

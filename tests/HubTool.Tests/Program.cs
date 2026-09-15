@@ -17,6 +17,9 @@ Check(PeripheralCatalog.IsNativePeripheral("USB", "USB\\VID_1234&PID_5678", "Gen
 Check(PeripheralCatalog.Icon(new Device { Kind = "Uscita audio", AudioFormFactor = 3 }) == "headphones"
     && PeripheralCatalog.Icon(new Device { Kind = "Microfono" }) == "microphone"
     && PeripheralCatalog.Icon(new Device { Kind = "Keyboard" }) == "keyboard", "Headphones, microphone and keyboard get distinct icons");
+Check(Math.Abs(AudioTopologyControls.LevelToPercent(12, 0, 16) - 75) < .001
+    && Math.Abs(AudioTopologyControls.PercentToLevel(63, 0, 16) - 10.08) < .001
+    && AudioTopologyControls.IsSidetone("sidetone:enabled:12"), "Sidetone values map safely between driver levels and UI percent");
 var grouped = PeripheralCatalog.Prepare([
     new Device { Id = "HID\\ONE", Kind = "Keyboard", Name = "Keyboard", ContainerId = "same" },
     new Device { Id = "HID\\TWO", Kind = "Keyboard", Name = "Keyboard", ContainerId = "same" },
@@ -104,8 +107,17 @@ if (args.Contains("--hardware-read"))
     using var live = new DeviceService(liveState);
     await live.RefreshAsync();
     Check(liveState.Devices.Any(d => d.Connected), "Real SetupAPI inventory is populated");
+    var fifineOutput = liveState.Devices.FirstOrDefault(d => d.Connected && d.Kind == "Uscita audio" && d.Name.Contains("fifine", StringComparison.OrdinalIgnoreCase));
+    if (fifineOutput != null)
+    {
+        var sidetoneControls = fifineOutput.Controls.Where(c => AudioTopologyControls.IsSidetone(c.Id)).ToList();
+        Check(sidetoneControls.Count >= 2, "Fifine playback topology exposes microphone sidetone controls");
+        foreach (var control in sidetoneControls) await live.SetControlAsync(fifineOutput, control.Id, fifineOutput.Values[control.Id]);
+        Check(sidetoneControls.All(c => fifineOutput.Values.ContainsKey(c.Id)), "Sidetone controls accept a no-change hardware write");
+    }
     Console.WriteLine(JsonSerializer.Serialize(new { Devices = liveState.Devices.Count,
         Audio = liveState.Devices.Count(d => d.Volume.HasValue),
+        Sidetone = liveState.Devices.Count(d => d.Controls.Any(c => AudioTopologyControls.IsSidetone(c.Id))),
         MonitorsWithControls = liveState.Devices.Count(d => d.Id.StartsWith("monitor:") && d.Controls.Count > 0),
         VisiblePeripherals = liveState.Devices.Count(PeripheralCatalog.IsVisible), Errors = live.Errors }));
 }

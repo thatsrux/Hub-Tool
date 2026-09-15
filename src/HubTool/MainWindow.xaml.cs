@@ -36,6 +36,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        var version = typeof(MainWindow).Assembly.GetName().Version;
+        AppVersion.Text = version == null ? "" : $"{version.Major}.{version.Minor}.{version.Build}";
         service = new DeviceService(state);
         service.AudioChanged += id => Dispatcher.BeginInvoke(() =>
         {
@@ -196,27 +198,24 @@ public partial class MainWindow : Window
         if (device.Kind is "Keyboard" or "Mouse")
             panel.Children.Add(Text("Preferenze Windows condivise con le altre " + (device.Kind == "Keyboard" ? "tastiere." : "periferiche mouse."), 11));
 
-        var controlPanel = new StackPanel();
-        foreach (var control in device.Controls)
+        var sidetone = device.Controls.Where(c => AudioTopologyControls.IsSidetone(c.Id)).ToList();
+        if (sidetone.Count > 0)
         {
-            if (!device.Values.TryGetValue(control.Id, out var value)) continue;
-            if (control.Toggle)
-            {
-                var check = new CheckBox { Content = control.Label, IsChecked = value != 0 };
-                check.SetBinding(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty,
-                    new Binding("Values[" + control.Id + "]") { Source = device, Mode = BindingMode.OneWay, Converter = new ToggleConverter() });
-                check.Click += async (_, _) => await RunAsync(async () =>
-                {
-                    await service.SetControlAsync(device, control.Id, check.IsChecked == true ? 1 : 0); state.Save();
-                });
-                controlPanel.Children.Add(check);
-            }
-            else AddSlider(controlPanel, control.Label, control.Min, control.Max, control.Step, value, control.Unit,
-                async newValue => { await service.SetControlAsync(device, control.Id, newValue); state.Save(); }, device, control.Id);
+            var sidetonePanel = new StackPanel();
+            sidetonePanel.Children.Add(Text("Eco microfono nelle cuffie", compact ? 13 : 16));
+            if (!compact) sidetonePanel.Children.Add(Text("Ascolto diretto del microfono gestito dal driver delle cuffie.", 11));
+            RenderControls(sidetonePanel, device, sidetone);
+            panel.Children.Add(new Border { Child = sidetonePanel, Background = (Brush)new BrushConverter().ConvertFromString("#1D2C3E")!,
+                BorderBrush = (Brush)new BrushConverter().ConvertFromString("#35485D")!, BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8), Padding = new Thickness(compact ? 9 : 12), Margin = new Thickness(0, 10, 0, 10) });
         }
-        if (device.Volume.HasValue)
+
+        var ordinaryControls = device.Controls.Where(c => !AudioTopologyControls.IsSidetone(c.Id)).ToList();
+        var controlPanel = new StackPanel();
+        RenderControls(controlPanel, device, ordinaryControls);
+        if (ordinaryControls.Count > 0 && device.Volume.HasValue)
             panel.Children.Add(new Expander { Header = "Canali e livello in dB", Content = controlPanel, Margin = new Thickness(0, 12, 0, 12), Foreground = Brushes.White });
-        else panel.Children.Add(controlPanel);
+        else if (ordinaryControls.Count > 0) panel.Children.Add(controlPanel);
 
         if (!compact)
         {
@@ -241,6 +240,27 @@ public partial class MainWindow : Window
             if (device.Manufacturer.Length > 0) metadata.Children.Add(Text("Produttore · " + device.Manufacturer, 12));
             if (device.Driver.Length > 0) metadata.Children.Add(Text("Driver · " + device.Driver, 11));
             panel.Children.Add(new Expander { Header = "Dettagli tecnici", Content = metadata, Foreground = Brushes.White, Margin = new Thickness(0, 16, 0, 8) });
+        }
+    }
+
+    private void RenderControls(StackPanel panel, Device device, IEnumerable<DeviceControl> controls)
+    {
+        foreach (var control in controls)
+        {
+            if (!device.Values.TryGetValue(control.Id, out var value)) continue;
+            if (control.Toggle)
+            {
+                var check = new CheckBox { Content = control.Label, IsChecked = value != 0 };
+                check.SetBinding(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty,
+                    new Binding("Values[" + control.Id + "]") { Source = device, Mode = BindingMode.OneWay, Converter = new ToggleConverter() });
+                check.Click += async (_, _) => await RunAsync(async () =>
+                {
+                    await service.SetControlAsync(device, control.Id, check.IsChecked == true ? 1 : 0); state.Save();
+                });
+                panel.Children.Add(check);
+            }
+            else AddSlider(panel, control.Label, control.Min, control.Max, control.Step, value, control.Unit,
+                async newValue => { await service.SetControlAsync(device, control.Id, newValue); state.Save(); }, device, control.Id);
         }
     }
 
