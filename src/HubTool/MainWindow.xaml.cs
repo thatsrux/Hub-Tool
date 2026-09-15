@@ -586,8 +586,8 @@ public partial class MainWindow : Window
     internal OverlayWindow CreateDiagnosticOverlay()
     {
         if (App.PreviewDirectory == null) throw new InvalidOperationException("Richiede preferenze isolate");
-        foreach (var device in state.Devices.Where(PeripheralCatalog.IsVisible).Where(d => d.Volume.HasValue || d.Kind == "Monitor")
-            .OrderByDescending(d => d.Volume.HasValue).GroupBy(d => d.Category).Take(3).Select(g => g.First())) device.Overlay = true;
+        foreach (var device in state.Devices.Where(PeripheralCatalog.IsVisible)
+            .OrderByDescending(d => d.Volume.HasValue || d.Controls.Count > 0).ThenBy(d => d.Category).ThenBy(d => d.Name).Take(7)) device.Overlay = true;
         return new OverlayWindow(() => state.Devices.Where(d => PeripheralCatalog.IsVisible(d) && d.Overlay).ToList(), CreateOverlayModule,
             state, () => { }, () => { }, () => { })
         { Left = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth + 100, Top = SystemParameters.VirtualScreenTop + 100 };

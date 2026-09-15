@@ -1,5 +1,5 @@
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$')][string]$Version = '0.5.0',
+    [ValidatePattern('^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$')][string]$Version = '0.5.1',
     [ValidateSet('win-x64','win-arm64')][string]$Runtime = 'win-x64',
     [string]$Dotnet = 'dotnet'
 )

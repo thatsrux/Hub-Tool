@@ -2,7 +2,7 @@
 
 Un centro di controllo nativo per Windows: dispositivi, audio, profili e shortcut, con un overlay discreto.
 
-**0.5.0 è una prerelease.** L'elenco riguarda le periferiche d'interfaccia: audio, monitor, tastiere, mouse, videocamere, illuminazione compatibile, stampanti, scanner e hub USB esterni. Non include CPU, bus, controller host o altri nodi interni. La copertura dei controlli è descritta nella [matrice delle capacità](docs/CAPABILITIES.md).
+**0.5.1 è una prerelease.** L'elenco riguarda le periferiche d'interfaccia: audio, monitor, tastiere, mouse, videocamere, illuminazione compatibile, stampanti, scanner e hub USB esterni. Non include CPU, bus, controller host o altri nodi interni. La copertura dei controlli è descritta nella [matrice delle capacità](docs/CAPABILITIES.md).
 
 ## Download
 
@@ -67,7 +67,7 @@ Su Windows con SDK .NET 8:
 dotnet build src/HubTool/HubTool.csproj -c Release
 dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release
 dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release -- --hardware-read
-./scripts/package.ps1 -Version 0.5.0
+./scripts/package.ps1 -Version 0.5.1
 ```
 
 I test ordinari verificano persistenza, protocollo luci, merge dell'inventario, riconnessione e profili offline senza cambiare hardware. `--hardware-read` aggiunge letture reali di input, audio, monitor e luci. `--light-write` esegue una scrittura invariata sul controller e va usato con DX Light e Hub chiusi. [Verifica e limiti](docs/VERIFICATION.md).

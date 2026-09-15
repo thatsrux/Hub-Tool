@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 
 namespace HubTool;
@@ -32,6 +33,12 @@ internal sealed class OverlayWindow : Window
         Title = "Hub overlay"; WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true; Background = Brushes.Transparent; Foreground = Brushes.White;
         ShowInTaskbar = false; ShowActivated = false; UseLayoutRounding = true;
+        SourceInitialized += (_, _) =>
+        {
+            // Layered transparent WPF windows can intermittently corrupt small vector paths on some GPU drivers.
+            // The overlay is tiny, so per-window software composition is both stable and inexpensive.
+            if (PresentationSource.FromVisual(this) is HwndSource source) source.CompositionTarget.RenderMode = RenderMode.SoftwareOnly;
+        };
         PreviewKeyDown += (_, e) =>
         {
             if (e.Key != Key.Escape) return;
@@ -89,25 +96,7 @@ internal sealed class OverlayWindow : Window
         selected = device; Render();
         if (IsVisible)
         {
-            UpdateLayout(); PositionExpanded();
             if (App.PreviewDirectory == null) { KeepOnScreen(); Activate(); Focus(); }
-        }
-    }
-
-    private void PositionExpanded()
-    {
-        var area = WorkArea(); var compact = CompactSize();
-        if (settings.OverlayOrientation == "Vertical")
-        {
-            var dockRight = dockAnchor.X + compact.Width / 2 > area.Left + area.Width / 2;
-            Left = dockRight ? dockAnchor.X + compact.Width - ActualWidth : dockAnchor.X;
-            Top = Math.Clamp(dockAnchor.Y, area.Top, Math.Max(area.Top, area.Bottom - ActualHeight));
-        }
-        else
-        {
-            var dockBottom = dockAnchor.Y + compact.Height / 2 > area.Top + area.Height / 2;
-            Left = Math.Clamp(dockAnchor.X, area.Left, Math.Max(area.Left, area.Right - ActualWidth));
-            Top = dockBottom ? dockAnchor.Y + compact.Height - ActualHeight : dockAnchor.Y;
         }
     }
 
@@ -122,7 +111,7 @@ internal sealed class OverlayWindow : Window
         }
 
         var area = WorkArea();
-        SizeToContent = SizeToContent.WidthAndHeight; ClearValue(WidthProperty); ClearValue(HeightProperty);
+        var compactSize = CompactSize();
         var card = new Grid { Width = 374, MaxHeight = Math.Max(280, Math.Min(610, area.Height - 34)) };
         card.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); card.RowDefinitions.Add(new RowDefinition());
         var header = new Grid { Margin = new Thickness(4, 2, 2, 12) };
@@ -145,14 +134,44 @@ internal sealed class OverlayWindow : Window
             var grid = new Grid(); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); grid.ColumnDefinitions.Add(new ColumnDefinition());
             var right = dockAnchor.X > area.Left + area.Width / 2;
             Grid.SetColumn(rail, right ? 1 : 0); Grid.SetColumn(surface, right ? 0 : 1); grid.Children.Add(surface); grid.Children.Add(rail);
-            grid.MinWidth = CompactSize().Width + 406; grid.MaxHeight = Math.Min(620, area.Height - 20); Content = grid;
+            grid.MinWidth = compactSize.Width + 406; grid.MaxHeight = Math.Min(620, area.Height - 20);
+            ApplyExpandedLayout(grid, area, compactSize, right);
         }
         else
         {
             var grid = new Grid(); grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); grid.RowDefinitions.Add(new RowDefinition());
             var bottom = dockAnchor.Y > area.Top + area.Height / 2;
             Grid.SetRow(rail, bottom ? 1 : 0); Grid.SetRow(surface, bottom ? 0 : 1); grid.Children.Add(surface); grid.Children.Add(rail);
-            grid.MinWidth = Math.Max(CompactSize().Width, 406); grid.MaxHeight = Math.Min(620, area.Height - 20); Content = grid;
+            grid.MinWidth = Math.Max(compactSize.Width, 406); grid.MaxHeight = Math.Min(620, area.Height - 20);
+            ApplyExpandedLayout(grid, area, compactSize, bottom);
+        }
+    }
+
+    private void ApplyExpandedLayout(Grid content, Rect area, Size compact, bool opensBefore)
+    {
+        content.Measure(new Size(Math.Max(1, area.Width), Math.Max(1, area.Height - 20)));
+        var width = Math.Ceiling(Math.Min(area.Width, Math.Max(1, content.DesiredSize.Width)));
+        var height = Math.Ceiling(Math.Min(area.Height, Math.Max(1, content.DesiredSize.Height)));
+        double left, top;
+        if (settings.OverlayOrientation == "Vertical")
+        {
+            left = opensBefore ? dockAnchor.X + compact.Width - width : dockAnchor.X;
+            top = Math.Clamp(dockAnchor.Y, area.Top, Math.Max(area.Top, area.Bottom - height));
+        }
+        else
+        {
+            left = Math.Clamp(dockAnchor.X, area.Left, Math.Max(area.Left, area.Right - width));
+            top = opensBefore ? dockAnchor.Y + compact.Height - height : dockAnchor.Y;
+        }
+        left = Math.Clamp(left, area.Left, Math.Max(area.Left, area.Right - width));
+        top = Math.Clamp(top, area.Top, Math.Max(area.Top, area.Bottom - height));
+
+        // All final bounds are known before the visual tree is swapped. This prevents the one-frame
+        // resize to the outside edge that SizeToContent caused on right/bottom docks.
+        using (Dispatcher.DisableProcessing())
+        {
+            SizeToContent = SizeToContent.Manual;
+            Left = left; Top = top; Width = width; Height = height; Content = content;
         }
     }
 
@@ -187,7 +206,8 @@ internal sealed class OverlayWindow : Window
     private Button IconButton(object content, string tooltip, bool active)
     {
         var size = settings.OverlayIconSize;
-        var button = new Button { Width = size, Height = size, Padding = new Thickness(0), Margin = new Thickness(2), Content = content,
+        if (content is FrameworkElement icon) icon.CacheMode = new BitmapCache { RenderAtScale = 2 };
+        var button = new Button { Width = size, Height = size, Padding = new Thickness(0), Margin = new Thickness(3), Content = content,
             ToolTip = tooltip, Background = active ? Brush("#315D60") : Brushes.Transparent };
         button.SetResourceReference(StyleProperty, "OverlayIconButton");
         System.Windows.Automation.AutomationProperties.SetName(button, tooltip); return button;
@@ -195,8 +215,8 @@ internal sealed class OverlayWindow : Window
 
     private Size CompactSize()
     {
-        var count = Math.Max(1, getDevices().Count) + 1; var extent = count * (settings.OverlayIconSize + 4) + 10;
-        return settings.OverlayOrientation == "Horizontal" ? new Size(extent, settings.OverlayIconSize + 10) : new Size(settings.OverlayIconSize + 10, extent);
+        var count = Math.Max(1, getDevices().Count) + 1; var extent = count * (settings.OverlayIconSize + 6) + 12;
+        return settings.OverlayOrientation == "Horizontal" ? new Size(extent, settings.OverlayIconSize + 12) : new Size(settings.OverlayIconSize + 12, extent);
     }
 
     private Rect WorkArea()

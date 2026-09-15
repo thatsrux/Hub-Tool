@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-09-15
+
+- Corretto il rendering intermittente delle icone nell’overlay verticale con composizione stabile, cache raster locale e pulsanti visivamente separati.
+- Eliminato il ridimensionamento in due fasi: quando la barra è sul bordo destro, il pannello viene misurato prima e si apre direttamente a sinistra mantenendo fermo il bordo.
+- Aggiunta una verifica UI con sette icone, dodici ricostruzioni identiche e apertura dal bordo destro verso sinistra.
+
 ## 0.5.0 — 2026-09-15
 
 - Ridisegnata l’intera interfaccia con superfici, controlli, stati focus e icona Hub vettoriale più leggibili.

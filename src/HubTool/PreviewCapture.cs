@@ -1,4 +1,5 @@
 using System.IO;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -87,8 +88,24 @@ internal static class PreviewCapture
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             if (overlay.Window.Width >= overlay.Window.Height) throw new InvalidOperationException("Barra icone verticale non valida");
             Capture(overlay.Window, "overlay-icons-vertical");
+            var stableHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(App.PreviewDirectory, "overlay-icons-vertical.png"))));
+            for (var pass = 0; pass < 12; pass++)
+            {
+                overlay.Window.RefreshModules();
+                await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                Capture(overlay.Window, "overlay-icons-repeat");
+                var repeated = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(App.PreviewDirectory, "overlay-icons-repeat.png"))));
+                if (repeated != stableHash) throw new InvalidOperationException("Il rendering delle icone cambia fra due frame identici");
+            }
+            var verticalLeft = overlay.Window.Left; var compactRight = overlay.Window.Left + overlay.Window.Width;
+            overlay.Window.OpenFirstModuleForDiagnostics();
+            await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            if (!overlay.Window.Expanded || overlay.Window.Left >= verticalLeft - 1 || Math.Abs(overlay.Window.Left + overlay.Window.Width - compactRight) > 1)
+                throw new InvalidOperationException("L’overlay ancorato a destra non si apre direttamente verso sinistra");
+            Capture(overlay.Window, "overlay-right-open");
             File.WriteAllText(Path.Combine(App.PreviewDirectory, "result.json"), JsonSerializer.Serialize(new
-            { Pages = tabs.Items.Count, CompactIcons = overlay.Window.IconCount, HorizontalLayout = true, VerticalLayout = true, NativeCaption = false, ClickExpanded = true, EscapeCollapsed = true, AnchorPreserved = true,
+            { Pages = tabs.Items.Count, CompactIcons = overlay.Window.IconCount, HorizontalLayout = true, VerticalLayout = true, StableIconPasses = 12,
+                RightDockOpensLeft = true, NativeCaption = false, ClickExpanded = true, EscapeCollapsed = true, AnchorPreserved = true,
                 CameraFrameAnalyzed = cameraAnalysis.HasValue, CameraMeanLuma = cameraAnalysis?.MeanLuma, CameraAnalysisError = cameraAnalysisError, Completed = true }));
         }
         window.Hide();

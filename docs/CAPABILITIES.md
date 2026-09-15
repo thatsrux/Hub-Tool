@@ -1,4 +1,4 @@
-# Copertura effettiva — 0.5.0
+# Copertura effettiva — 0.5.1
 
 | Categoria | Rilevamento | Controlli diretti | Limiti |
 |---|---|---|---|
