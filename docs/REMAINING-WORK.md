@@ -7,6 +7,7 @@ Il precedente obiettivo di controllare qualsiasi funzione di qualsiasi component
 Restano possibili evoluzioni del prodotto, distinte dalla revisione UI:
 
 - Altri provider documentati per funzioni proprietarie, senza indovinare protocolli HID.
+- Selezione del monitor e calibrazione dell’ordine fisico dei LED per configurazioni QuikLight diverse da quella verificata a 54 LED/tre lati.
 - Associazione manuale di ID hardware cambiati, sequenze di shortcut e mixer per applicazione.
 - Firma Authenticode, installer e architetture aggiuntive.
 - Ulteriori misure su PC/driver diversi. L'overlay standard non garantisce il fullscreen esclusivo o i desktop protetti.

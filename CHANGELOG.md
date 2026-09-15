@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — 2026-09-15
+
+- Aggiunto il dispositivo “Luci dietro al monitor” per il controller DX Light/QuikLight USB `1A86:FE07`, rilevato e controllato direttamente via HID.
+- Aggiunti accensione, luminosità, colore RGB/HEX, preset, sync schermo a 54 zone, fluidità, intensità e smoothing.
+- Importate al primo avvio le impostazioni già presenti in DX Light; profili, shortcut, overlay e ripristino includono i controlli luce.
+- Hub attende senza conflitti mentre DX Light è aperto e riapplica automaticamente l’ultimo stato dopo la sua chiusura, senza spegnere le luci alla propria uscita.
+- Verificati protocollo, rilevamento e scrittura reale invariata sul controller; aggiunto benchmark con sync attivo.
+
 ## 0.3.5 — 2026-09-15
 
 - Rimossi dall'inventario i nodi Tastiera HID, HID-compliant mouse e le altre interfacce input generiche; restano una sola voce Mouse e Tastiera con i controlli Windows.

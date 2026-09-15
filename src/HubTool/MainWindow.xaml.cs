@@ -211,6 +211,14 @@ public partial class MainWindow : Window
         if (device.Kind is "Keyboard" or "Mouse")
             panel.Children.Add(Text("Preferenze Windows condivise con le altre " + (device.Kind == "Keyboard" ? "tastiere." : "periferiche mouse."), 11));
 
+        if (device.Id.StartsWith("light:", StringComparison.Ordinal))
+        {
+            panel.Children.Add(Text(LightControls.IsDxLightRunning()
+                ? "DX Light è aperto. Hub ha memorizzato le impostazioni e prenderà il controllo automaticamente appena lo chiudi, riaccendendo le luci."
+                : "Hub controlla direttamente il controller USB. Puoi chiudere DX Light: l’ultimo stato resta attivo.", 11));
+            RenderLightControls(panel, device, compact);
+        }
+
         var sidetone = device.Controls.Where(c => AudioTopologyControls.IsSidetone(c.Id)).ToList();
         if (sidetone.Count > 0)
         {
@@ -223,7 +231,7 @@ public partial class MainWindow : Window
                 CornerRadius = new CornerRadius(8), Padding = new Thickness(compact ? 9 : 12), Margin = new Thickness(0, 10, 0, 10) });
         }
 
-        var ordinaryControls = device.Controls.Where(c => !AudioTopologyControls.IsSidetone(c.Id)).ToList();
+        var ordinaryControls = device.Controls.Where(c => !AudioTopologyControls.IsSidetone(c.Id) && !c.Id.StartsWith("light:")).ToList();
         var controlPanel = new StackPanel();
         RenderControls(controlPanel, device, ordinaryControls);
         if (ordinaryControls.Count > 0 && device.Volume.HasValue)
@@ -254,6 +262,50 @@ public partial class MainWindow : Window
             if (device.Driver.Length > 0) metadata.Children.Add(Text("Driver · " + device.Driver, 11));
             panel.Children.Add(new Expander { Header = "Dettagli tecnici", Content = metadata, Foreground = Brushes.White, Margin = new Thickness(0, 16, 0, 8) });
         }
+    }
+
+    private void RenderLightControls(StackPanel panel, Device device, bool compact)
+    {
+        var basic = device.Controls.Where(c => c.Id is "light:enabled" or "light:sync" or "light:brightness").ToList();
+        RenderControls(panel, device, basic);
+
+        var colorPanel = new StackPanel();
+        colorPanel.Children.Add(Text("Colore fisso", compact ? 13 : 16));
+        var swatches = new WrapPanel { Margin = new Thickness(0, 4, 0, 8) };
+        foreach (var hex in new[] { "#FF3B30", "#FF9500", "#FFD60A", "#34C759", "#00C7BE", "#0A84FF", "#AF52DE", "#FFFFFF" })
+        {
+            var button = new Button { Width = 31, Height = 31, Margin = new Thickness(2), Padding = new Thickness(0), Tag = hex,
+                Background = (Brush)new BrushConverter().ConvertFromString(hex)!, ToolTip = hex };
+            button.Click += async (_, _) => await RunAsync(() => SetLightColor(device, (string)button.Tag));
+            swatches.Children.Add(button);
+        }
+        colorPanel.Children.Add(swatches);
+        var hexRow = new DockPanel();
+        var apply = new Button { Content = "Applica", Padding = new Thickness(12, 5, 12, 5), HorizontalAlignment = HorizontalAlignment.Right };
+        DockPanel.SetDock(apply, Dock.Right); hexRow.Children.Add(apply);
+        var hexBox = new TextBox { Text = $"#{(int)device.Values.GetValueOrDefault("light:red", 0):X2}{(int)device.Values.GetValueOrDefault("light:green", 0):X2}{(int)device.Values.GetValueOrDefault("light:blue", 0):X2}",
+            MaxLength = 7, Margin = new Thickness(0, 0, 8, 0), VerticalContentAlignment = VerticalAlignment.Center };
+        apply.Click += async (_, _) => await RunAsync(() => SetLightColor(device, hexBox.Text));
+        hexRow.Children.Add(hexBox); colorPanel.Children.Add(hexRow);
+        RenderControls(colorPanel, device, device.Controls.Where(c => c.Id is "light:red" or "light:green" or "light:blue"));
+        panel.Children.Add(new Border { Child = colorPanel, Background = (Brush)new BrushConverter().ConvertFromString("#1D2C3E")!,
+            BorderBrush = (Brush)new BrushConverter().ConvertFromString("#35485D")!, BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8), Padding = new Thickness(compact ? 9 : 12), Margin = new Thickness(0, 10, 0, 10) });
+
+        var advanced = new StackPanel();
+        RenderControls(advanced, device, device.Controls.Where(c => c.Id is "light:fps" or "light:saturation" or "light:smoothing"));
+        panel.Children.Add(new Expander { Header = "Qualità sincronizzazione schermo", Content = advanced, Foreground = Brushes.White, Margin = new Thickness(0, 8, 0, 10) });
+    }
+
+    private async Task SetLightColor(Device device, string hex)
+    {
+        hex = hex.Trim();
+        if (hex.Length != 7 || hex[0] != '#' || !int.TryParse(hex[1..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var rgb))
+            throw new InvalidOperationException("Inserisci un colore nel formato #RRGGBB");
+        await service.SetControlAsync(device, "light:red", rgb >> 16 & 255);
+        await service.SetControlAsync(device, "light:green", rgb >> 8 & 255);
+        await service.SetControlAsync(device, "light:blue", rgb & 255);
+        state.Save(); RenderList();
     }
 
     private void RenderControls(StackPanel panel, Device device, IEnumerable<DeviceControl> controls)

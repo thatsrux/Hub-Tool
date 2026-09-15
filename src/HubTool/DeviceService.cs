@@ -6,13 +6,16 @@ public sealed class DeviceService : IDisposable
 {
     private readonly MMDeviceEnumerator enumerator = new();
     private readonly Dictionary<string, MMDevice> watched = new();
+    private readonly LightControls lights = new();
+    private readonly bool controlLights;
     public event Action<string>? AudioChanged;
     public Settings State { get; }
     public List<string> Errors { get; } = new();
 
-    public DeviceService(Settings settings)
+    public DeviceService(Settings settings, bool controlLights = true)
     {
         State = settings;
+        this.controlLights = controlLights;
         var removed = State.Devices.Where(d => !PeripheralCatalog.IsPeripheral(d)).Select(d => d.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         State.Devices.RemoveAll(d => removed.Contains(d.Id));
         foreach (var profile in State.Profiles)
@@ -36,6 +39,12 @@ public sealed class DeviceService : IDisposable
             catch (Exception ex) { lock (Errors) Errors.Add("Monitor: " + ex.Message); }
             try { list.AddRange(CameraControls.Enumerate()); }
             catch (Exception ex) { lock (Errors) Errors.Add("Webcam: " + ex.Message); }
+            try
+            {
+                var light = LightControls.Discover(State.Devices.FirstOrDefault(d => d.Id == LightControls.DeviceId));
+                if (light != null) list.Add(light);
+            }
+            catch (Exception ex) { lock (Errors) Errors.Add("Illuminazione: " + ex.Message); }
             return list;
         });
         foreach (var endpoint in enumerator.EnumerateAudioEndPoints(DataFlow.All, DeviceState.Active))
@@ -87,6 +96,7 @@ public sealed class DeviceService : IDisposable
             foreach (var shortcut in State.Shortcuts.Where(s => s.DeviceId == current.PhysicalId)) shortcut.DeviceId = current.Id;
         }
         var restore = DeviceInventory.Merge(State.Devices, found);
+        if (controlLights) lights.Attach(State.Devices.FirstOrDefault(d => d.Id == LightControls.DeviceId && d.Connected));
         Errors.AddRange(found.Where(d => d.Error.Length > 0).Select(d => d.Name + ": " + d.Error));
         foreach (var device in restore)
         {
@@ -220,6 +230,11 @@ public sealed class DeviceService : IDisposable
                 device.NotifyValues();
                 return;
             }
+            else if (device.Id.StartsWith("light:"))
+            {
+                await lights.SetAsync(device, key, value);
+                return;
+            }
             else if (device.Id.StartsWith("audio:"))
             {
                 using var endpoint = enumerator.GetDevice(device.Id[6..]);
@@ -288,7 +303,7 @@ public sealed class DeviceService : IDisposable
     public void Dispose()
     {
         foreach (var endpoint in watched.Values) endpoint.Dispose();
-        watched.Clear(); enumerator.Dispose();
+        watched.Clear(); lights.Dispose(); enumerator.Dispose();
     }
 }
 

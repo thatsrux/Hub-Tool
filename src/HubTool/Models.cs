@@ -22,7 +22,7 @@ public sealed class Device : INotifyPropertyChanged
     [JsonIgnore] public string TypeLabel => PeripheralCatalog.Icon(this) switch
     {
         "headphones" => "Cuffie", "speaker" => "Altoparlanti", "microphone" => "Microfono", "keyboard" => "Tastiera", "mouse" => "Mouse",
-        "monitor" => "Monitor", "camera" => "Videocamera", "printer" => "Stampante", "scanner" => "Scanner", "drive" => "Memoria USB", "gamepad" => "Gamepad", _ => "Hub USB"
+        "monitor" => "Monitor", "camera" => "Videocamera", "light" => "Illuminazione", "printer" => "Stampante", "scanner" => "Scanner", "drive" => "Memoria USB", "gamepad" => "Gamepad", _ => "Hub USB"
     };
     [JsonIgnore] public System.Windows.Media.Geometry IconGeometry => DeviceIcons.For(PeripheralCatalog.Icon(this));
     [JsonIgnore] public System.Windows.Media.Brush IconBrush => DeviceIcons.Accent(PeripheralCatalog.Icon(this));

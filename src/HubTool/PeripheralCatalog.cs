@@ -43,7 +43,7 @@ public static class PeripheralCatalog
     };
 
     public static bool IsPeripheral(Device device) => !IsGenericInput(device) && !IsVirtualCamera(device) && !IsVirtualPrintQueue(device)
-        && (device.Id.StartsWith("audio:") || device.Id.StartsWith("monitor:") || device.Id.StartsWith("camera:")
+        && (device.Id.StartsWith("audio:") || device.Id.StartsWith("monitor:") || device.Id.StartsWith("camera:") || device.Id.StartsWith("light:")
         || device.Id.StartsWith("input:") || device.Id.StartsWith("windows:") || IsNativePeripheral(device.Kind, device.Id, device.Name));
 
     public static bool IsVisible(Device device) => IsPeripheral(device);
@@ -51,7 +51,7 @@ public static class PeripheralCatalog
     public static string Category(Device device) => device.Kind.ToLowerInvariant() switch
     {
         "microfono" => "Microfoni", "uscita audio" => "Audio", "mouse" or "keyboard" or "hidclass" => "Input",
-        "monitor" => "Monitor", "camera" => "Videocamere", _ => "USB e altro"
+        "monitor" => "Monitor", "camera" => "Videocamere", "light" => "Illuminazione", _ => "USB e altro"
     };
 
     public static string Icon(Device device)
@@ -61,7 +61,7 @@ public static class PeripheralCatalog
             || device.Name.Contains("head", StringComparison.OrdinalIgnoreCase) || device.Name.Contains("cuffi", StringComparison.OrdinalIgnoreCase) ? "headphones" : "speaker";
         return device.Kind.ToLowerInvariant() switch
         {
-            "keyboard" => "keyboard", "mouse" => "mouse", "monitor" => "monitor", "camera" => "camera", "image" => "scanner",
+            "keyboard" => "keyboard", "mouse" => "mouse", "monitor" => "monitor", "camera" => "camera", "light" => "light", "image" => "scanner",
             "printer" or "printqueue" => "printer", "diskdrive" => "drive", "hidclass" => "gamepad", _ => "usb"
         };
     }

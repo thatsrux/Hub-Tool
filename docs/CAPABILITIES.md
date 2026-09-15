@@ -1,4 +1,4 @@
-# Copertura effettiva — 0.3.5
+# Copertura effettiva — 0.4.0
 
 | Categoria | Rilevamento | Controlli diretti | Limiti |
 |---|---|---|---|
@@ -9,6 +9,7 @@
 | Tastiere | PnP + preferenze Windows | Velocità e ritardo ripetizione | Preferenze globali; rimappatura per dispositivo, macro e RGB non integrati |
 | Monitor | PnP + monitor fisici Windows | Luminosità e contrasto se DDC/CI risponde | Alcuni pannelli interni, dock e driver non espongono questi controlli; WMI brightness non ancora integrata |
 | Webcam | PnP + DirectShow | Esposizione, fuoco, zoom, pan/tilt, luminosità, contrasto e altri controlli standard; ripristino collettivo ai default del driver | Nessuna cattura video; estensioni proprietarie non integrate; valori/auto disponibili solo quando supportati |
+| Luci monitor | USB HID `1A86:FE07` | Accensione, RGB/HEX, preset, luminosità; sync dei bordi dello schermo su 54 zone con fps, saturazione e smoothing | Verificato sul controller Robobloq firmware 1.9.4; cattura dello schermo primario; altri controller RGB richiedono provider dedicati |
 | Controller | PnP | Inventario e preferenze overlay | Test input, vibrazione, deadzone e rimappature non ancora integrati |
 | Stampanti | PnP | Apertura pannello stampanti | Code e preferenze specifiche non integrate |
 | Rete / Bluetooth | Pannelli Windows | Apertura impostazioni | Adattatori interni non elencati come periferiche |
@@ -28,3 +29,5 @@ I descrittori `DeviceControl` definiscono nome, limiti e unità. `DeviceService`
 - [SystemParametersInfo](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfow)
 - [Monitor configuration](https://learn.microsoft.com/en-us/windows/win32/monitor/monitor-configuration-functions)
 - [RegisterHotKey](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey)
+- [HID clients](https://learn.microsoft.com/en-us/windows-hardware/drivers/hid/creating-hid-clients)
+- [Bit-block transfer](https://learn.microsoft.com/en-us/windows/win32/gdi/bit-block-transfer)

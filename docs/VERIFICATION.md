@@ -1,31 +1,30 @@
-# Verifica — 2026-09-13
+# Verifica — 2026-09-15
 
 ## Eseguito localmente
 
-- Build Release .NET SDK 8.0.425: zero errori e zero avvisi, con output isolato perché una build precedente era aperta.
-- 11 controlli automatici di persistenza/inventario/profili: passati.
-- 2 controlli aggiuntivi di lettura hardware: passati; 310 elementi, 4 endpoint audio, 2 monitor con controlli, zero errori di discovery.
-- Rendering delle 4 pagine WPF da visual tree reale. Corretto contrasto della ComboBox, tema della finestra derivata e cattura delle dimensioni complete.
-- Audit dipendenze NuGet: nessun pacchetto vulnerabile segnalato dalla sorgente consultata.
-- Misurazione preliminare in finestra nascosta dopo rendering: 15,01 s, 0,625 s CPU, 187,32 MiB working set, 119,27 MiB privati. Nessun GC forzato o taglio artificiale del working set.
+- Build Release con .NET SDK 8.0.425: zero errori e zero avvisi.
+- 33 controlli con `--hardware-read`: persistenza, inventario, profili, protocollo QuikLight, input, audio, monitor e rilevamento delle luci; tutti passati.
+- Scrittura reale invariata con DX Light e Hub chiusi: luminosità e colore statico accettati dal controller USB `1A86:FE07`, senza errori.
+- Rendering delle quattro pagine WPF, layout compatto e overlay completato. La scheda luci mostra stato DX Light, interruttori, luminosità, preset, HEX/RGB e parametri sync.
+- Passaggio operativo verificato avviando Hub dopo DX Light: importati stato acceso, sync attivo, colore `#E300FF` e 54 LED; nessun errore registrato.
+- Campione dell’EXE autonomo con sync attivo a 15 fps per 20 s: 2,109 s CPU, pari a circa 0,659% della capacità totale sui 16 thread logici del Ryzen 7 7700; working set 272,6 MiB, memoria privata 161,4 MiB, nessuna crescita nel campione.
 
-## Non dimostrato
+## Limiti della verifica
 
-- Le letture reali non provano tutte le scritture dei driver. Il test di riconnessione è sul modello; non sostituisce stacchi/riattacchi fisici per ogni periferica.
-- La verifica delle pagine renderizzate non sostituisce la prova interattiva di tastiera, mouse e lettore di schermo.
+- La prova riguarda il controller Robobloq/DX Light rilevato, firmware 1.9.4 e 54 LED. Altri VID/PID o layout richiedono una verifica dedicata.
+- Il sync usa lo schermo primario e una disposizione a tre lati. Se la striscia è installata in ordine diverso, i colori possono richiedere una futura calibrazione della mappa.
+- La resa visiva fisica dei singoli LED non può essere valutata automaticamente; protocollo, apertura HID e scrittura sono stati verificati.
 - Non è stata verificata la resa dell'overlay con tutti i giochi, DPI e configurazioni multimonitor.
-- Non sono state certificate memoria minima, consumo CPU minimo, compatibilità hardware universale o assenza di tutte le vulnerabilità.
 - Firma Authenticode, certificazione, installer MSIX e supporto ARM64 restano aperti.
-
-## Distribuzione verificata
-
-- Repository pubblica: https://github.com/thatsrux/Hub-Tool
-- Pipeline release del tag `v0.2.0`: https://github.com/thatsrux/Hub-Tool/actions/runs/34775424952 — completata con successo, test e packaging inclusi.
-- Release pubblica (non draft), marcata prerelease: https://github.com/thatsrux/Hub-Tool/releases/tag/v0.2.0
-- Asset presenti: EXE autonomo x64, ZIP portable, ZIP compatto e SHA256SUMS. ZIP compatto circa 295 KiB; ZIP portable circa 64,7 MiB; EXE circa 154,6 MiB.
-- EXE riscaricato da GitHub: SHA-256 `90478f804ad68f5adb5db4fe330b90da228c235acb2a9d9a9f8eea0c55a0f5cc`, corrispondente al manifesto pubblicato.
-- Il binario riscaricato ha avviato la discovery, renderizzato quattro pagine e terminato la diagnostica senza errori. Campione dopo rendering: 15,01 s, 0,6875 s CPU, 181,81 MiB working set, 116,08 MiB privati.
 
 ## Riproduzione
 
-Eseguire `HubTool.Tests` su Windows. La modalità standard scrive solo preferenze temporanee e usa dispositivi simulati per le prove di merge/offline. `--hardware-read` legge le API reali senza modificare impostazioni. Il comando `--preview` dell'app scrive immagini e metriche in una cartella scelta, con una nuova cartella dati isolata per ogni esecuzione.
+```powershell
+dotnet build src/HubTool/HubTool.csproj -c Release
+dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release
+dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release -- --hardware-read
+# Solo con DX Light e Hub chiusi; invia gli stessi valori già configurati:
+dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release -- --light-write
+```
+
+`HubTool.exe --preview PERCORSO` produce schermate e controlli UI in una cartella dati isolata. `--benchmark PERCORSO` misura l’attività a finestra nascosta.

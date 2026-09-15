@@ -18,6 +18,7 @@ public static class DeviceIcons
         ["mouse"] = Shape("M5,9 A7,7 0 0 1 19,9 V17 A7,7 0 0 1 5,17 Z M12,3 V10 M11,7 H13"),
         ["monitor"] = Shape("M2,3 H22 V18 H2 Z M12,18 V23 M7,23 H17"),
         ["camera"] = Shape("M3,6 H16 Q18,6 18,8 V18 Q18,20 16,20 H3 Q1,20 1,18 V8 Q1,6 3,6 Z M18,11 L24,7 V19 L18,15 Z M6,10 H8"),
+        ["light"] = Shape("M9,21 H15 M10,18 H14 M8,15 Q5,12 5,8 A7,7 0 0 1 19,8 Q19,12 16,15 L15,17 H9 Z M12,0 V3 M3,2 L5,4 M21,2 L19,4 M0,9 H3 M21,9 H24"),
         ["usb"] = Shape("M3,10 H21 V20 H3 Z M7,14 V17 M12,14 V17 M17,14 V17 M12,10 V3 M9,3 H15"),
         ["printer"] = Shape("M6,9 V2 H18 V9 M6,19 H2 V9 H22 V19 H18 M6,15 H18 V24 H6 Z M17,12 H19"),
         ["scanner"] = Shape("M2,14 H22 V22 H2 Z M3,14 L7,3 L22,10 M6,18 H15 M18,18 H19"),
@@ -29,7 +30,7 @@ public static class DeviceIcons
     public static Brush Accent(string kind) => kind switch
     {
         "microphone" => Brushes.LightCoral, "keyboard" or "mouse" => Brushes.LightSkyBlue,
-        "monitor" => Brushes.CornflowerBlue, "camera" => Brushes.Plum, "usb" or "drive" => Brushes.Khaki,
+        "monitor" => Brushes.CornflowerBlue, "camera" => Brushes.Plum, "light" => Brushes.Gold, "usb" or "drive" => Brushes.Khaki,
         _ => Teal
     };
     public static FrameworkElement Create(Device device, double size = 22) => new Viewbox

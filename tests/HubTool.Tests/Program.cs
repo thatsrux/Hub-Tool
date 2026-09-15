@@ -16,7 +16,13 @@ Check(PeripheralCatalog.IsNativePeripheral("USB", "USB\\VID_1234&PID_5678", "Gen
     && !PeripheralCatalog.IsNativePeripheral("USB", "USB\\ROOT_HUB30", "USB Root Hub"), "External USB hubs are retained while root hubs are excluded");
 Check(PeripheralCatalog.Icon(new Device { Kind = "Uscita audio", AudioFormFactor = 3 }) == "headphones"
     && PeripheralCatalog.Icon(new Device { Kind = "Microfono" }) == "microphone"
-    && PeripheralCatalog.Icon(new Device { Kind = "Keyboard" }) == "keyboard", "Headphones, microphone and keyboard get distinct icons");
+    && PeripheralCatalog.Icon(new Device { Kind = "Keyboard" }) == "keyboard"
+    && PeripheralCatalog.Icon(new Device { Kind = "Light" }) == "light", "Headphones, microphone, keyboard and lights get distinct icons");
+var lightPacket = QuikLightProtocol.Simple(2, 135, [75]);
+var lightFrame = QuikLightProtocol.Frame(3, Enumerable.Repeat(new LightControls.Rgb(10, 20, 30), 54).ToArray());
+Check(lightPacket.SequenceEqual(new byte[] { 82, 66, 7, 2, 135, 75, 111 }) && lightFrame.Length == 277
+    && lightFrame[0] == 83 && lightFrame[1] == 67 && lightFrame[5] == 128 && lightFrame[6] == 1 && lightFrame[275] == 54,
+    "QuikLight commands use the controller's RB/SC framing and all 54 LED zones");
 Check(!PeripheralCatalog.IsPeripheral(new Device { Id = "input:Keyboard:generic", Name = "Tastiera HID", Kind = "Keyboard" })
     && !PeripheralCatalog.IsPeripheral(new Device { Id = "ROOT\\MOUSE\\0000", Name = "HID-compliant mouse", Kind = "Mouse" })
     && PeripheralCatalog.IsPeripheral(new Device { Id = InputControls.KeyboardId, Name = "Tastiera", Kind = "Keyboard" }),
@@ -132,9 +138,11 @@ if (args.Contains("--hardware-read"))
     var input = InputControls.Enumerate();
     Check(input.Count == 2 && input.All(d => d.Controls.Count > 0), "Windows exposes input preference controls");
     var liveState = new Settings();
-    using var live = new DeviceService(liveState);
+    using var live = new DeviceService(liveState, controlLights: false);
     await live.RefreshAsync();
     Check(liveState.Devices.Any(d => d.Connected), "Real SetupAPI inventory is populated");
+    Check(liveState.Devices.Any(d => d.Id == LightControls.DeviceId && d.Connected && d.Controls.Count >= 9),
+        "DX Light monitor LEDs are detected as a configurable device");
     var fifineOutput = liveState.Devices.FirstOrDefault(d => d.Connected && d.Kind == "Uscita audio" && d.Name.Contains("fifine", StringComparison.OrdinalIgnoreCase));
     if (fifineOutput != null)
     {
@@ -157,5 +165,15 @@ if (args.Contains("--hardware-read"))
         Sidetone = liveState.Devices.Count(d => d.Controls.Any(c => AudioTopologyControls.IsSidetone(c.Id))),
         MonitorsWithControls = liveState.Devices.Count(d => d.Id.StartsWith("monitor:") && d.Controls.Count > 0),
         VisiblePeripherals = liveState.Devices.Count(PeripheralCatalog.IsVisible), Errors = live.Errors }));
+}
+if (args.Contains("--light-write"))
+{
+    var light = LightControls.Discover(null) ?? throw new Exception("FAIL: QuikLight controller not found");
+    light.Values["light:sync"] = 0;
+    using var controller = new LightControls();
+    controller.Attach(light);
+    await controller.SetAsync(light, "light:brightness", light.Values["light:brightness"]);
+    await Task.Delay(1800);
+    Check(light.Error.Length == 0, "QuikLight accepts a no-change brightness and static-color write");
 }
 Console.WriteLine($"{passed} checks passed");
