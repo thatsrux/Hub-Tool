@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2 — 2026-09-15
+
+- Corretto il ritaglio del bordo hover delle icone: la misura dell’overlay ora include integralmente margini, padding e bordo sull’asse corto.
+- Aggiunta una prova con puntatore reale sull’icona e cattura del bordo completo, mantenendo lo stile hover esistente.
+
 ## 0.5.1 — 2026-09-15
 
 - Corretto il rendering intermittente delle icone nell’overlay verticale con composizione stabile, cache raster locale e pulsanti visivamente separati.

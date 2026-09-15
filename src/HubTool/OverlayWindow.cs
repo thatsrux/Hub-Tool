@@ -24,6 +24,8 @@ internal sealed class OverlayWindow : Window
     public bool Expanded => selected != null;
     public int IconCount { get; private set; }
     public Point BadgePosition => Expanded ? dockAnchor : new Point(Left, Top);
+    internal bool CompactContentFits => Expanded || Content is not FrameworkElement element
+        || element.DesiredSize.Width <= Width + .1 && element.DesiredSize.Height <= Height + .1;
 
     public OverlayWindow(Func<IReadOnlyList<Device>> getDevices, Func<Device, FrameworkElement> createModule, Settings settings,
         Action savePosition, Action returnFocus, Action openSettings)
@@ -216,7 +218,8 @@ internal sealed class OverlayWindow : Window
     private Size CompactSize()
     {
         var count = Math.Max(1, getDevices().Count) + 1; var extent = count * (settings.OverlayIconSize + 6) + 12;
-        return settings.OverlayOrientation == "Horizontal" ? new Size(extent, settings.OverlayIconSize + 12) : new Size(settings.OverlayIconSize + 12, extent);
+        // Cross-axis size includes button margins (6), rail padding (10) and rail border (2).
+        return settings.OverlayOrientation == "Horizontal" ? new Size(extent, settings.OverlayIconSize + 18) : new Size(settings.OverlayIconSize + 18, extent);
     }
 
     private Rect WorkArea()

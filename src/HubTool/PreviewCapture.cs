@@ -1,5 +1,6 @@
 using System.IO;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -87,6 +88,7 @@ internal static class PreviewCapture
             window.SetOverlayOrientationForDiagnostics("Vertical"); overlay.Window.RefreshAppearance();
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             if (overlay.Window.Width >= overlay.Window.Height) throw new InvalidOperationException("Barra icone verticale non valida");
+            if (!overlay.Window.CompactContentFits) throw new InvalidOperationException("La barra compatta ritaglia i pulsanti delle icone");
             Capture(overlay.Window, "overlay-icons-vertical");
             var stableHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(App.PreviewDirectory, "overlay-icons-vertical.png"))));
             for (var pass = 0; pass < 12; pass++)
@@ -97,6 +99,18 @@ internal static class PreviewCapture
                 var repeated = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(App.PreviewDirectory, "overlay-icons-repeat.png"))));
                 if (repeated != stableHash) throw new InvalidOperationException("Il rendering delle icone cambia fra due frame identici");
             }
+            var firstIcon = FindVisualChild<Button>((DependencyObject)overlay.Window.Content);
+            if (firstIcon == null) throw new InvalidOperationException("Icona overlay non trovata");
+            GetCursorPos(out var previousPointer);
+            try
+            {
+                var hover = firstIcon.PointToScreen(new Point(firstIcon.ActualWidth / 2, firstIcon.ActualHeight / 2));
+                SetCursorPos((int)Math.Round(hover.X), (int)Math.Round(hover.Y));
+                await Task.Delay(100); await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Input);
+                if (!firstIcon.IsMouseOver || !overlay.Window.CompactContentFits) throw new InvalidOperationException("Il bordo hover dell’icona non è interamente visibile");
+                Capture(overlay.Window, "overlay-icons-hover");
+            }
+            finally { SetCursorPos(previousPointer.X, previousPointer.Y); }
             var verticalLeft = overlay.Window.Left; var compactRight = overlay.Window.Left + overlay.Window.Width;
             overlay.Window.OpenFirstModuleForDiagnostics();
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
@@ -105,7 +119,7 @@ internal static class PreviewCapture
             Capture(overlay.Window, "overlay-right-open");
             File.WriteAllText(Path.Combine(App.PreviewDirectory, "result.json"), JsonSerializer.Serialize(new
             { Pages = tabs.Items.Count, CompactIcons = overlay.Window.IconCount, HorizontalLayout = true, VerticalLayout = true, StableIconPasses = 12,
-                RightDockOpensLeft = true, NativeCaption = false, ClickExpanded = true, EscapeCollapsed = true, AnchorPreserved = true,
+                HoverBorderVisible = true, RightDockOpensLeft = true, NativeCaption = false, ClickExpanded = true, EscapeCollapsed = true, AnchorPreserved = true,
                 CameraFrameAnalyzed = cameraAnalysis.HasValue, CameraMeanLuma = cameraAnalysis?.MeanLuma, CameraAnalysisError = cameraAnalysisError, Completed = true }));
         }
         window.Hide();
@@ -129,4 +143,19 @@ internal static class PreviewCapture
         public OverlayWindow Window => window;
         public void Dispose() => window.Close();
     }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T match) return match;
+            var nested = FindVisualChild<T>(child); if (nested != null) return nested;
+        }
+        return null;
+    }
+
+    [StructLayout(LayoutKind.Sequential)] private struct CursorPoint { public int X; public int Y; }
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out CursorPoint point);
+    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
 }
