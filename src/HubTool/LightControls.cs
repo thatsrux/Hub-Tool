@@ -131,7 +131,9 @@ public sealed class LightControls : IDisposable
                         if (!enabled) await SendSimpleAsync(151, []);
                         else
                         {
-                            await SendSimpleAsync(135, [(byte)Math.Clamp(Math.Round(Get(values, "light:brightness", 100)), 0, 100)]);
+                            // QuikLight's command uses attenuation: 0 is brightest and 100 is darkest.
+                            // Hub exposes the conventional direction and converts only at the USB boundary.
+                            await SendSimpleAsync(135, [QuikLightProtocol.Brightness(Get(values, "light:brightness", 100))]);
                             if (!sync) await SendStaticAsync(values, ledCount);
                         }
                         current.Error = "";
@@ -303,6 +305,7 @@ public sealed class LightControls : IDisposable
 
 internal static class QuikLightProtocol
 {
+    internal static byte Brightness(double hubPercent) => (byte)(100 - Math.Clamp(Math.Round(hubPercent), 0, 100));
     internal static byte[] Simple(byte messageId, byte action, byte[] payload)
     {
         var packet = new byte[6 + payload.Length];

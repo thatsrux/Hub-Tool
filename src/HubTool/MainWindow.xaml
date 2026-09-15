@@ -2,8 +2,8 @@
  <Grid Margin="22,16,22,12">
   <Grid.RowDefinitions><RowDefinition Height="52"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <DockPanel Margin="0,0,0,12">
-   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"><Button Content="Aggiorna" Click="RefreshClick" Padding="14,6"/><Button x:Name="OverlayToggle" Content="Overlay" Click="OverlayClick" Padding="14,6" Style="{StaticResource AccentButton}"/></StackPanel>
-   <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Border Background="#19423C" CornerRadius="8" Width="32" Height="32"><TextBlock Text="H" Foreground="{StaticResource Accent}" FontSize="21" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Hub Tool" FontSize="22" FontWeight="SemiBold" Margin="10,0" VerticalAlignment="Center"/><TextBlock x:Name="AppVersion" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/></StackPanel>
+   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"><Button Content="↻  Aggiorna" Click="RefreshClick" Padding="14,7"/><Button x:Name="OverlayToggle" Content="Mostra overlay" Click="OverlayClick" Padding="15,7" Style="{StaticResource AccentButton}"/></StackPanel>
+   <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Border Background="#18374A" BorderBrush="#3B7182" BorderThickness="1" CornerRadius="10" Width="36" Height="36"><Viewbox Margin="7"><Path Data="M3,2 L3,14 M13,2 L13,14 M3,8 L13,8 M1,5 L5,5 M11,5 L15,5 M1,11 L5,11 M11,11 L15,11" Stroke="{StaticResource Accent}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Viewbox></Border><TextBlock Text="Hub Tool" FontSize="22" FontWeight="SemiBold" Margin="11,0,7,0" VerticalAlignment="Center"/><Border Background="#233248" CornerRadius="8" Padding="7,3"><TextBlock x:Name="AppVersion" FontSize="10" Foreground="#B7C7D9" VerticalAlignment="Center"/></Border></StackPanel>
   </DockPanel>
   <TabControl x:Name="Pages" Grid.Row="1" Background="Transparent" BorderThickness="0">
    <TabItem Header="Dispositivi"><Grid Margin="0,14,0,0"><Grid.RowDefinitions><RowDefinition Height="58"/><RowDefinition Height="58"/><RowDefinition/></Grid.RowDefinitions>
@@ -50,6 +50,23 @@
      <TextBlock Text="Le combinazioni già usate da altre app vengono segnalate." Style="{StaticResource Hint}" Margin="0,12,0,0"/>
     </StackPanel></ScrollViewer></Border>
     <Border Grid.Column="1" Style="{StaticResource SectionCard}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="Shortcut registrate" Style="{StaticResource SectionTitle}"/><ListBox x:Name="Shortcuts" Grid.Row="1" Margin="0,12,0,12"/><Button Grid.Row="2" Content="Rimuovi selezionata" Click="RemoveShortcut" HorizontalAlignment="Left"/></Grid></Border>
+   </Grid></TabItem>
+   <TabItem x:Name="OverlayTab" Header="Overlay"><Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+    <Border Style="{StaticResource SectionCard}" Margin="0,0,14,0"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+     <TextBlock Text="Aspetto e comportamento" Style="{StaticResource SectionTitle}"/><TextBlock Text="L’overlay parte come una barra discreta di icone. Seleziona un’icona per aprire soltanto quel dispositivo." Style="{StaticResource Hint}" Margin="0,4,0,16"/>
+     <TextBlock Text="Orientamento"/><ComboBox x:Name="OverlayOrientationChoice" SelectionChanged="OverlaySettingsChanged"><ComboBoxItem Content="Orizzontale"/><ComboBoxItem Content="Verticale"/></ComboBox>
+     <DockPanel Margin="0,12,0,0"><TextBlock x:Name="OverlayIconSizeValue" DockPanel.Dock="Right" Foreground="{StaticResource Accent}"/><TextBlock Text="Dimensione icone"/></DockPanel><Slider x:Name="OverlayIconSizeSlider" Minimum="42" Maximum="68" TickFrequency="2" IsSnapToTickEnabled="True" ValueChanged="OverlaySettingsChanged"/>
+     <DockPanel Margin="0,6,0,0"><TextBlock x:Name="OverlayOpacityValue" DockPanel.Dock="Right" Foreground="{StaticResource Accent}"/><TextBlock Text="Opacità"/></DockPanel><Slider x:Name="OverlayOpacitySlider" Minimum="60" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="OverlaySettingsChanged"/>
+     <CheckBox x:Name="OverlayAutoCollapseChoice" Content="Comprimi quando perde il focus" Click="OverlaySettingsChanged"/>
+     <CheckBox x:Name="OverlayAlwaysOnTopChoice" Content="Sempre in primo piano" Click="OverlaySettingsChanged"/>
+     <UniformGrid Columns="2" Margin="0,14,0,0"><Button Content="Mostra / nascondi" Click="OverlayClick" Style="{StaticResource AccentButton}"/><Button Content="Ripristina posizione" Click="ResetOverlayPosition"/></UniformGrid>
+    </StackPanel></ScrollViewer></Border>
+    <Border Grid.Column="1" Style="{StaticResource SectionCard}"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+     <TextBlock Text="Dispositivi visibili" Style="{StaticResource SectionTitle}"/><TextBlock Text="Scegli quali icone mostrare nella barra. L’ordine segue l’elenco dei dispositivi." Style="{StaticResource Hint}" Margin="0,4,0,12"/>
+     <StackPanel x:Name="OverlayDeviceChoices"/>
+     <Separator Margin="0,18" Background="#304155"/>
+     <TextBlock x:Name="ForgottenDeviceCount" Style="{StaticResource Hint}"/><Button x:Name="RestoreForgottenButton" Content="Ripristina dispositivi dimenticati" Click="RestoreForgottenDevices" HorizontalAlignment="Left"/>
+    </StackPanel></ScrollViewer></Border>
    </Grid></TabItem>
    <TabItem Header="Windows"><Border Style="{StaticResource SectionCard}" Margin="0,14,0,0"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
     <TextBlock Text="Impostazioni Windows" Style="{StaticResource SectionTitle}"/>

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -30,6 +31,8 @@ public partial class MainWindow : Window
     private bool exiting;
     private IntPtr handle;
     private IntPtr previousForeground;
+    private bool updatingOverlaySettings;
+    private CameraPreviewHost? activeCameraPreview;
 
     private sealed record ActionOption(string Label, string Action, string DeviceId = "", string Control = "");
 
@@ -71,7 +74,7 @@ public partial class MainWindow : Window
             handle = new WindowInteropHelper(this).Handle;
             Native.DarkCaption(handle);
             HwndSource.FromHwnd(handle).AddHook(Hook);
-            if (App.PreviewDirectory == null) tray = new TrayIcon(handle, OpenHub, () => ToggleOverlay(false), () => { exiting = true; Close(); });
+            if (App.PreviewDirectory == null) tray = new TrayIcon(handle, OpenHub, ToggleOverlayVisibility, () => { exiting = true; Close(); });
             if (App.PreviewDirectory == null) RegisterShortcuts();
             else Shortcuts.ItemsSource = state.Shortcuts;
             events.RegisterEndpointNotificationCallback(notifications);
@@ -122,6 +125,7 @@ public partial class MainWindow : Window
         Profiles.ItemsSource = null; Profiles.ItemsSource = state.Profiles;
         Profiles.SelectedItem = selected ?? state.Profiles.FirstOrDefault();
         PopulateActions();
+        RenderOverlaySettings();
         Status.Text = $"{state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && d.Connected)} collegati · {state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && !d.Connected)} scollegati";
         if (service.Errors.Count > 0) Status.Text += " · " + string.Join("; ", service.Errors);
         if (shortcutErrors.Count > 0) Status.Text += " · " + string.Join("; ", shortcutErrors);
@@ -154,6 +158,7 @@ public partial class MainWindow : Window
     private void CategoryChanged(object sender, SelectionChangedEventArgs e) { if (service != null) RenderList(); }
     private void SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        activeCameraPreview?.Suspend(); activeCameraPreview?.Dispose(); activeCameraPreview = null;
         Details.Children.Clear();
         if (DeviceList.SelectedItem is Device device) RenderDevice(Details, device, false);
         else Details.Children.Add(Text("Nessun dispositivo corrisponde alla ricerca.", 20));
@@ -178,19 +183,7 @@ public partial class MainWindow : Window
             Foreground = (Brush)FindResource("Muted"), TextWrapping = TextWrapping.Wrap });
         Grid.SetColumn(titles, 1); header.Children.Add(titles); panel.Children.Add(header);
         if (device.Error.Length > 0) panel.Children.Add(Text(device.Error, 12));
-        if (!compact && device.Id.StartsWith("camera:", StringComparison.Ordinal) && device.Controls.Count > 0)
-        {
-            var resetCamera = new Button { Content = "Ripristina impostazioni predefinite", HorizontalAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(0, 0, 0, 12) };
-            resetCamera.Click += async (_, _) => await RunAsync(async () =>
-            {
-                var result = await service.ResetCameraAsync(device);
-                Status.Text = result.Errors.Count == 0
-                    ? $"Videocamera ripristinata · {result.Applied} impostazioni"
-                    : $"Ripristinate {result.Applied} impostazioni · " + string.Join("; ", result.Errors);
-            });
-            panel.Children.Add(resetCamera);
-        }
+        if (!compact && device.Id.StartsWith("camera:", StringComparison.Ordinal) && device.Controls.Count > 0) RenderCameraStudio(panel, device);
         if (device.Volume.HasValue)
         {
             AddSlider(panel, "Volume", 0, 100, 1, device.Volume.Value * 100, "%", async value =>
@@ -256,6 +249,11 @@ public partial class MainWindow : Window
             var open = new Button { Content = "Impostazioni Windows", HorizontalAlignment = HorizontalAlignment.Left };
             open.Click += async (_, _) => await RunAsync(() => { Launch(SettingsTarget(device)); return Task.CompletedTask; });
             panel.Children.Add(open);
+            var forget = new Button { Content = "Dimentica dispositivo", HorizontalAlignment = HorizontalAlignment.Left,
+                Foreground = (Brush)new BrushConverter().ConvertFromString("#FFB4AB")!, BorderBrush = (Brush)new BrushConverter().ConvertFromString("#76504F")!,
+                Margin = new Thickness(0, 14, 0, 0), ToolTip = "Rimuove dispositivo, impostazioni, profili e shortcut. Puoi ripristinarlo dalla pagina Overlay." };
+            forget.Click += async (_, _) => await RunAsync(() => ForgetDeviceAsync(device));
+            panel.Children.Add(forget);
             var metadata = new StackPanel();
             metadata.Children.Add(Text("ID persistente\n" + device.Id, 11));
             if (device.Manufacturer.Length > 0) metadata.Children.Add(Text("Produttore · " + device.Manufacturer, 12));
@@ -297,6 +295,85 @@ public partial class MainWindow : Window
         panel.Children.Add(new Expander { Header = "Qualità sincronizzazione schermo", Content = advanced, Foreground = Brushes.White, Margin = new Thickness(0, 8, 0, 10) });
     }
 
+    private void RenderCameraStudio(StackPanel panel, Device device)
+    {
+        var studio = new StackPanel();
+        var title = new DockPanel();
+        var live = new Border { Background = (Brush)new BrushConverter().ConvertFromString("#183B35")!, CornerRadius = new CornerRadius(8), Padding = new Thickness(8, 4, 8, 4), HorizontalAlignment = HorizontalAlignment.Right };
+        DockPanel.SetDock(live, Dock.Right); live.Child = new TextBlock { Text = "●  LIVE", Foreground = (Brush)FindResource("Accent"), FontSize = 10, FontWeight = FontWeights.SemiBold }; title.Children.Add(live);
+        title.Children.Add(Text("Anteprima videocamera", 16)); studio.Children.Add(title);
+        var preview = new CameraPreviewHost(device.Name) { Height = 260 };
+        activeCameraPreview = preview;
+        studio.Children.Add(new Border { Background = Brushes.Black, BorderBrush = (Brush)FindResource("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Padding = new Thickness(2), Child = preview });
+        studio.Children.Add(new TextBlock { Text = "Le regolazioni vengono mostrate qui in tempo reale. L’analisi Enhance resta sul PC.", Style = (Style)FindResource("Hint"), Margin = new Thickness(2, 8, 2, 10) });
+
+        var actions = new UniformGrid { Columns = 2 };
+        var enhance = new Button { Content = "✦  Enhance with AI", Style = (Style)FindResource("AccentButton"), ToolTip = "Analizza luce, contrasto e colore del fotogramma e ottimizza i parametri supportati" };
+        enhance.Click += async (_, _) => await RunAsync(async () =>
+        {
+            Status.Text = "Analisi intelligente del fotogramma…";
+            var frame = preview.CaptureAnalysis(); var recommendations = CameraControls.RecommendEnhancement(device, frame);
+            preview.Suspend(); var errors = new List<string>(); int applied = 0;
+            try
+            {
+                foreach (var (key, value) in recommendations)
+                {
+                    try { await service.SetControlAsync(device, key, value); applied++; }
+                    catch (Exception ex) { errors.Add((device.Controls.FirstOrDefault(c => c.Id == key)?.Label ?? key) + ": " + ex.Message); }
+                }
+            }
+            finally { preview.Resume(); }
+            state.Save();
+            Status.Text = errors.Count == 0 ? $"Immagine ottimizzata · {applied} parametri" : $"Ottimizzati {applied} parametri · " + string.Join("; ", errors);
+        });
+        var resetCamera = new Button { Content = "Ripristina default" };
+        resetCamera.Click += async (_, _) => await RunAsync(async () =>
+        {
+            preview.Suspend(); CameraControls.ResetResult result;
+            try { result = await service.ResetCameraAsync(device); } finally { preview.Resume(); }
+            Status.Text = result.Errors.Count == 0 ? $"Videocamera ripristinata · {result.Applied} impostazioni"
+                : $"Ripristinate {result.Applied} impostazioni · " + string.Join("; ", result.Errors);
+        });
+        actions.Children.Add(enhance); actions.Children.Add(resetCamera); studio.Children.Add(actions);
+
+        var profileTitle = Text("Profili immagine", 15); profileTitle.Margin = new Thickness(0, 16, 0, 4); studio.Children.Add(profileTitle);
+        var name = new TextBox { Text = "Profilo " + (device.CameraProfiles.Count + 1), ToolTip = "Nome del nuovo profilo" }; studio.Children.Add(name);
+        var profileChoice = new ComboBox { ItemsSource = device.CameraProfiles, ToolTip = "Profilo immagine salvato" }; studio.Children.Add(profileChoice);
+        var profileActions = new UniformGrid { Columns = 3 };
+        var save = new Button { Content = "Salva attuale" }; var apply = new Button { Content = "Applica" }; var delete = new Button { Content = "Elimina" };
+        save.Click += (_, _) =>
+        {
+            var profileName = name.Text.Trim(); if (profileName.Length == 0) { Status.Text = "Inserisci il nome del profilo immagine"; return; }
+            var existing = device.CameraProfiles.FirstOrDefault(p => p.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
+            var values = device.Values.Where(v => v.Key.StartsWith("camera:") || v.Key.StartsWith("video:")).ToDictionary();
+            if (existing == null) { existing = new CameraImageProfile { Name = profileName }; device.CameraProfiles.Add(existing); }
+            existing.Values = values; existing.SavedAt = DateTime.Now; state.Save(); profileChoice.ItemsSource = null; profileChoice.ItemsSource = device.CameraProfiles; profileChoice.SelectedItem = existing;
+            Status.Text = "Profilo immagine salvato: " + profileName;
+        };
+        apply.Click += async (_, _) =>
+        {
+            if (profileChoice.SelectedItem is not CameraImageProfile selected) { Status.Text = "Seleziona un profilo immagine"; return; }
+            await RunAsync(async () =>
+            {
+                preview.Suspend(); var errors = new List<string>(); int applied = 0;
+                try
+                {
+                    foreach (var (key, value) in selected.Values.Where(v => device.Controls.Any(c => c.Id == v.Key)))
+                    { try { await service.SetControlAsync(device, key, value); applied++; } catch (Exception ex) { errors.Add(ex.Message); } }
+                }
+                finally { preview.Resume(); }
+                state.Save(); Status.Text = errors.Count == 0 ? $"Profilo {selected.Name} applicato · {applied} parametri" : string.Join("; ", errors);
+            });
+        };
+        delete.Click += (_, _) =>
+        {
+            if (profileChoice.SelectedItem is not CameraImageProfile selected) { Status.Text = "Seleziona un profilo immagine"; return; }
+            device.CameraProfiles.Remove(selected); state.Save(); profileChoice.ItemsSource = null; profileChoice.ItemsSource = device.CameraProfiles; Status.Text = "Profilo immagine eliminato";
+        };
+        profileActions.Children.Add(save); profileActions.Children.Add(apply); profileActions.Children.Add(delete); studio.Children.Add(profileActions);
+        panel.Children.Add(new Border { Child = studio, Background = (Brush)FindResource("PanelRaised"), BorderBrush = (Brush)FindResource("Line"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Padding = new Thickness(14), Margin = new Thickness(0, 0, 0, 16) });
+    }
+
     private async Task SetLightColor(Device device, string hex)
     {
         hex = hex.Trim();
@@ -331,29 +408,62 @@ public partial class MainWindow : Window
 
     private void AddSlider(StackPanel panel, string label, double min, double max, double step, double value, string unit, Func<double, Task> apply, Device? device = null, string key = "")
     {
-        var heading = Text($"{label}  ·  {value:0.##} {unit}");
+        double Snap(double input) => SnapSliderValue(input, min, max, step);
+        var heading = Text($"{label}  ·  {Snap(value):0.##} {unit}");
         var slider = new Slider { Minimum = min, Maximum = max, TickFrequency = step, SmallChange = step,
-            LargeChange = Math.Max(step, (max - min) / 10), IsSnapToTickEnabled = true, Value = Math.Clamp(value, min, max),
+            LargeChange = Math.Max(step, (max - min) / 10), IsSnapToTickEnabled = false, IsMoveToPointEnabled = true, Value = Math.Clamp(value, min, max),
             Margin = new Thickness(2, 8, 2, 16), ToolTip = label };
         System.Windows.Automation.AutomationProperties.SetName(slider, label);
-        double committed = slider.Value;
-        bool edited = false;
-        slider.PreviewMouseLeftButtonDown += (_, _) => edited = true;
+        double committed = Snap(slider.Value);
+        bool edited = false, dragging = false, applying = false, pending = false;
+        var liveCommit = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(110) };
+        slider.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            edited = true;
+            if (FindVisualParent<Thumb>(e.OriginalSource as DependencyObject) != null || slider.ActualWidth <= 0) return;
+            var ratio = Math.Clamp(e.GetPosition(slider).X / slider.ActualWidth, 0, 1);
+            var raw = min + ratio * (max - min);
+            slider.Value = Math.Clamp(min + Math.Round((raw - min) / step) * step, min, max);
+        };
         slider.PreviewKeyDown += (_, e) => { if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Home or Key.End or Key.PageUp or Key.PageDown) edited = true; };
-        slider.ValueChanged += (_, _) => heading.Text = $"{label}  ·  {slider.Value:0.##} {unit}";
+        slider.ValueChanged += (_, _) =>
+        {
+            heading.Text = $"{label}  ·  {Snap(slider.Value):0.##} {unit}";
+            if (edited && dragging) { liveCommit.Stop(); liveCommit.Start(); }
+        };
         if (device != null) slider.SetBinding(Slider.ValueProperty, new Binding(key.Length == 0 ? nameof(Device.Volume) : "Values[" + key + "]")
         { Source = device, Mode = BindingMode.OneWay, Converter = key.Length == 0 ? new PercentConverter() : null });
-        async Task Commit()
+        async Task Commit(bool finish)
         {
-            if (!edited) return;
-            edited = false;
-            if (Math.Abs(committed - slider.Value) < .0001) return;
-            await RunAsync(async () => { await apply(slider.Value); committed = slider.Value; });
+            var target = Snap(slider.Value);
+            if (finish) { edited = false; slider.Value = target; }
+            if (Math.Abs(committed - target) < .0001) return;
+            if (applying) { pending = true; return; }
+            applying = true;
+            try { await RunAsync(async () => { await apply(target); committed = target; }); }
+            finally
+            {
+                applying = false;
+                if (pending) { pending = false; liveCommit.Stop(); liveCommit.Start(); }
+            }
         }
-        slider.PreviewMouseLeftButtonUp += async (_, _) => await Commit();
-        slider.PreviewKeyUp += async (_, _) => await Commit();
-        slider.LostKeyboardFocus += async (_, _) => await Commit();
+        liveCommit.Tick += async (_, _) => { liveCommit.Stop(); await Commit(false); };
+        slider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler((_, _) => { edited = true; dragging = true; }));
+        slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(async (_, _) => { dragging = false; liveCommit.Stop(); await Commit(true); }));
+        slider.PreviewMouseLeftButtonUp += async (_, _) => { if (!dragging) { liveCommit.Stop(); await Commit(true); } };
+        slider.PreviewKeyUp += async (_, _) => await Commit(true);
+        slider.LostKeyboardFocus += async (_, _) => await Commit(true);
+        slider.Unloaded += (_, _) => liveCommit.Stop();
         panel.Children.Add(heading); panel.Children.Add(slider);
+    }
+
+    internal static double SnapSliderValue(double input, double min, double max, double step) => Math.Clamp(
+        min + Math.Round((input - min) / step, MidpointRounding.AwayFromZero) * step, min, max);
+
+    private static T? FindVisualParent<T>(DependencyObject? value) where T : DependencyObject
+    {
+        while (value != null) { if (value is T match) return match; value = VisualTreeHelper.GetParent(value); }
+        return null;
     }
 
     private void RegisterShortcuts()
@@ -386,7 +496,7 @@ public partial class MainWindow : Window
         var selected = ActionChoice.SelectedItem as ActionOption;
         var choices = new List<ActionOption>
         {
-            new("Mostra e focalizza overlay", "overlay"), new("Mute di tutti i microfoni", "mute-input"),
+            new("Mostra / nascondi overlay", "toggle-overlay"), new("Focalizza overlay", "focus-overlay"), new("Mute di tutti i microfoni", "mute-input"),
             new("Mute di tutte le uscite", "mute-output"), new("Alza volume uscite del 5%", "volume-up"),
             new("Abbassa volume uscite del 5%", "volume-down"), new("Apri un programma o file", "launch")
         };
@@ -407,7 +517,8 @@ public partial class MainWindow : Window
     private async Task ExecuteAsync(Shortcut shortcut)
     {
         var action = shortcut.Action;
-        if (action == "overlay") { ToggleOverlay(); return; }
+        if (action is "overlay" or "toggle-overlay") { ToggleOverlayVisibility(); return; }
+        if (action == "focus-overlay") { ToggleOverlay(); return; }
         if (action == "launch") { Process.Start(new ProcessStartInfo(shortcut.Target) { Arguments = shortcut.Arguments, UseShellExecute = true }); return; }
         if (action.StartsWith("profile:"))
         {
@@ -445,17 +556,23 @@ public partial class MainWindow : Window
         if (focus && (overlay == null || foreground != new WindowInteropHelper(overlay).Handle)) previousForeground = foreground;
         if (overlay == null)
         {
-            overlay = new OverlayWindow(CreateOverlayModules, SaveOverlayPosition, ReturnFocus)
+            overlay = new OverlayWindow(() => state.Devices.Where(d => PeripheralCatalog.IsVisible(d) && d.Overlay).ToList(), CreateOverlayModule,
+                state, SaveOverlayPosition, ReturnFocus, OpenOverlaySettings)
             { Left = state.OverlayLeft ?? SystemParameters.WorkArea.Right - 74, Top = state.OverlayTop ?? SystemParameters.WorkArea.Bottom - 90 };
             overlay.Closing += (_, _) => { SaveOverlayPosition(); if (!exiting) state.OverlayEnabled = false; state.Save(); };
-            overlay.Closed += (_, _) => { overlay = null; OverlayToggle.Content = "Overlay"; };
+            overlay.Closed += (_, _) => { overlay = null; OverlayToggle.Content = "Mostra overlay"; };
         }
         state.OverlayEnabled = true;
-        OverlayToggle.Content = "Disattiva overlay";
+        OverlayToggle.Content = "Nascondi overlay";
         if (!overlay.IsVisible) overlay.Show();
         overlay.KeepOnScreen();
-        if (focus) { overlay.SetExpanded(true); overlay.Activate(); overlay.Focus(); }
+        if (focus) { overlay.Activate(); overlay.Focus(); }
         state.Save();
+    }
+
+    private void ToggleOverlayVisibility()
+    {
+        if (overlay?.IsVisible == true) overlay.Close(); else ToggleOverlay(false);
     }
 
     private void ReturnFocus()
@@ -471,35 +588,100 @@ public partial class MainWindow : Window
         if (App.PreviewDirectory == null) throw new InvalidOperationException("Richiede preferenze isolate");
         foreach (var device in state.Devices.Where(PeripheralCatalog.IsVisible).Where(d => d.Volume.HasValue || d.Kind == "Monitor")
             .OrderByDescending(d => d.Volume.HasValue).GroupBy(d => d.Category).Take(3).Select(g => g.First())) device.Overlay = true;
-        return new OverlayWindow(CreateOverlayModules, () => { }, () => { })
+        return new OverlayWindow(() => state.Devices.Where(d => PeripheralCatalog.IsVisible(d) && d.Overlay).ToList(), CreateOverlayModule,
+            state, () => { }, () => { }, () => { })
         { Left = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth + 100, Top = SystemParameters.VirtualScreenTop + 100 };
     }
-    private StackPanel CreateOverlayModules()
+    internal CameraFrameAnalysis? CaptureCameraAnalysisForDiagnostics() => activeCameraPreview?.CaptureAnalysis();
+    internal void SetOverlayOrientationForDiagnostics(string orientation)
     {
-        var body = new StackPanel();
-        var devices = state.Devices.Where(d => PeripheralCatalog.IsVisible(d) && d.Overlay).ToList();
-        if (devices.Count == 0)
-        {
-            body.Children.Add(Text("Nessun dispositivo selezionato.", 12));
-            var open = new Button { Content = "Scegli dispositivi" }; open.Click += (_, _) => OpenHub(); body.Children.Add(open);
-        }
-        foreach (var device in devices)
-        {
-            var module = new StackPanel(); RenderDevice(module, device, true);
-            body.Children.Add(new Border { Background = (Brush)FindResource("Panel"), BorderBrush = (Brush)new BrushConverter().ConvertFromString("#293B50")!,
-                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(12), Margin = new Thickness(0, 0, 0, 8), Child = module });
-        }
-        if (state.Profiles.Count > 0)
-        {
-            var profiles = new ComboBox { ItemsSource = state.Profiles, SelectedIndex = 0 };
-            var apply = new Button { Content = "Applica profilo" };
-            apply.Click += async (_, _) => { if (profiles.SelectedItem is Profile p) await RunAsync(() => ExecuteAsync(new Shortcut { Action = "profile:" + p.Name })); };
-            body.Children.Add(profiles); body.Children.Add(apply);
-        }
+        if (App.PreviewDirectory == null) throw new InvalidOperationException("Richiede preferenze isolate");
+        state.OverlayOrientation = orientation;
+    }
+    private FrameworkElement CreateOverlayModule(Device device)
+    {
+        var body = new StackPanel(); RenderDevice(body, device, true);
+        if (body.Children.Count > 0) body.Children.RemoveAt(0); // The overlay already has a device header.
         return body;
     }
 
-    private void OverlayClick(object sender, RoutedEventArgs e) { if (overlay != null) overlay.Close(); else ToggleOverlay(false); }
+    private void OverlayClick(object sender, RoutedEventArgs e) => ToggleOverlayVisibility();
+
+    private void OpenOverlaySettings()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            OpenHub(); Pages.SelectedItem = OverlayTab; RenderOverlaySettings();
+        });
+    }
+
+    private void RenderOverlaySettings()
+    {
+        if (OverlayOrientationChoice == null || service == null) return;
+        updatingOverlaySettings = true;
+        OverlayOrientationChoice.SelectedIndex = state.OverlayOrientation == "Vertical" ? 1 : 0;
+        OverlayIconSizeSlider.Value = state.OverlayIconSize;
+        OverlayOpacitySlider.Value = state.OverlayOpacity * 100;
+        OverlayIconSizeValue.Text = $"{state.OverlayIconSize:0} px";
+        OverlayOpacityValue.Text = $"{state.OverlayOpacity:P0}";
+        OverlayAutoCollapseChoice.IsChecked = state.OverlayAutoCollapse;
+        OverlayAlwaysOnTopChoice.IsChecked = state.OverlayAlwaysOnTop;
+        OverlayDeviceChoices.Children.Clear();
+        foreach (var device in state.Devices.Where(PeripheralCatalog.IsVisible).OrderByDescending(d => d.Connected).ThenBy(d => d.Name))
+        {
+            var row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(35) }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var icon = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(9), Background = (Brush)FindResource("PanelRaised"), Child = DeviceIcons.Create(device, 18) };
+            row.Children.Add(icon);
+            var label = new StackPanel(); label.Children.Add(new TextBlock { Text = device.Name, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+            label.Children.Add(new TextBlock { Text = device.Connected ? device.TypeLabel : device.TypeLabel + " · scollegato", Foreground = (Brush)FindResource("Muted"), FontSize = 10 });
+            Grid.SetColumn(label, 1); row.Children.Add(label);
+            var choice = new CheckBox { IsChecked = device.Overlay, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Mostra nell’overlay", Tag = device };
+            choice.Click += (_, _) =>
+            {
+                device.Overlay = choice.IsChecked == true; state.Save();
+                OverlayCount.Text = state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && d.Overlay).ToString(); RenderOverlay();
+            };
+            Grid.SetColumn(choice, 2); row.Children.Add(choice);
+            OverlayDeviceChoices.Children.Add(new Border { Child = row, BorderBrush = (Brush)FindResource("Line"), BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(4, 5, 4, 8) });
+        }
+        var forgotten = state.HiddenDeviceIds.Count;
+        ForgottenDeviceCount.Text = forgotten == 0 ? "Nessun dispositivo dimenticato." : $"{forgotten} identificativi dimenticati. Puoi renderli nuovamente visibili.";
+        RestoreForgottenButton.IsEnabled = forgotten > 0;
+        updatingOverlaySettings = false;
+    }
+
+    private void OverlaySettingsChanged(object sender, RoutedEventArgs e)
+    {
+        if (updatingOverlaySettings || OverlayOrientationChoice == null || OverlayIconSizeSlider == null || OverlayOpacitySlider == null
+            || OverlayAutoCollapseChoice == null || OverlayAlwaysOnTopChoice == null) return;
+        state.OverlayOrientation = OverlayOrientationChoice.SelectedIndex == 1 ? "Vertical" : "Horizontal";
+        state.OverlayIconSize = OverlayIconSizeSlider.Value;
+        state.OverlayOpacity = OverlayOpacitySlider.Value / 100;
+        state.OverlayAutoCollapse = OverlayAutoCollapseChoice.IsChecked == true;
+        state.OverlayAlwaysOnTop = OverlayAlwaysOnTopChoice.IsChecked == true;
+        OverlayIconSizeValue.Text = $"{state.OverlayIconSize:0} px"; OverlayOpacityValue.Text = $"{state.OverlayOpacity:P0}";
+        state.Save(); overlay?.RefreshAppearance();
+    }
+
+    private void ResetOverlayPosition(object sender, RoutedEventArgs e)
+    {
+        state.OverlayLeft = SystemParameters.WorkArea.Right - 360; state.OverlayTop = SystemParameters.WorkArea.Bottom - 92;
+        if (overlay != null) { overlay.Collapse(); overlay.Left = state.OverlayLeft.Value; overlay.Top = state.OverlayTop.Value; overlay.KeepOnScreen(); }
+        state.Save(); Status.Text = "Posizione overlay ripristinata";
+    }
+
+    private async Task ForgetDeviceAsync(Device device)
+    {
+        var name = device.Name; service.ForgetDevice(device); RegisterShortcuts(); RenderList(); PopulateActions(); RenderOverlaySettings(); RenderOverlay();
+        Status.Text = $"{name} dimenticato. Puoi ripristinarlo dalla pagina Overlay.";
+        await Task.CompletedTask;
+    }
+
+    private async void RestoreForgottenDevices(object sender, RoutedEventArgs e) => await RunAsync(async () =>
+    {
+        service.RestoreForgottenDevices(); await RefreshCore(); Status.Text = "Dispositivi dimenticati ripristinati";
+    });
     private async void SaveProfile(object sender, RoutedEventArgs e) => await RunAsync(async () =>
     {
         var name = ProfileName.Text.Trim();

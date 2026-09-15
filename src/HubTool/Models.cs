@@ -35,6 +35,7 @@ public sealed class Device : INotifyPropertyChanged
     public Dictionary<string, double> ControlMemory { get; set; } = new();
     public DeviceRequest? Pending { get; set; }
     public List<DeviceControl> Controls { get; set; } = new();
+    public List<CameraImageProfile> CameraProfiles { get; set; } = new();
     public string Manufacturer { get; set; } = "";
     public string Driver { get; set; } = "";
     public string Error { get; set; } = "";
@@ -53,6 +54,13 @@ public sealed class DeviceRequest
 }
 
 public sealed record DeviceControl(string Id, string Label, double Min, double Max, double Step, string Unit = "", bool Toggle = false);
+public sealed class CameraImageProfile
+{
+    public string Name { get; set; } = "";
+    public Dictionary<string, double> Values { get; set; } = new();
+    public DateTime SavedAt { get; set; } = DateTime.Now;
+    public override string ToString() => Name;
+}
 public sealed class AudioSetting { public float Volume { get; set; } public bool Muted { get; set; } }
 public sealed class Profile
 {
@@ -65,13 +73,13 @@ public sealed class Profile
 public sealed class Shortcut
 {
     public string Gesture { get; set; } = "Ctrl+Alt+H";
-    public string Action { get; set; } = "overlay";
+    public string Action { get; set; } = "toggle-overlay";
     public string DeviceId { get; set; } = "";
     public string Control { get; set; } = "";
     public double Value { get; set; }
     public string Target { get; set; } = "";
     public string Arguments { get; set; } = "";
-    public string Label { get; set; } = "Overlay";
+    public string Label { get; set; } = "Mostra/nascondi overlay";
     public override string ToString() => Gesture + "   →   " + Label;
 }
 
@@ -83,6 +91,12 @@ public sealed class Settings
     public bool OverlayEnabled { get; set; }
     public double? OverlayLeft { get; set; }
     public double? OverlayTop { get; set; }
+    public string OverlayOrientation { get; set; } = "Horizontal";
+    public double OverlayIconSize { get; set; } = 50;
+    public double OverlayOpacity { get; set; } = .96;
+    public bool OverlayAutoCollapse { get; set; } = true;
+    public bool OverlayAlwaysOnTop { get; set; } = true;
+    public List<string> HiddenDeviceIds { get; set; } = new();
     [JsonIgnore] public string RecoveryNotice { get; set; } = "";
     public static string? DataDirectoryOverride { get; set; }
     public static string Folder => DataDirectoryOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HubTool");
@@ -96,6 +110,11 @@ public sealed class Settings
         try
         {
             var state = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path)) ?? throw new JsonException("Dati vuoti");
+            foreach (var shortcut in state.Shortcuts.Where(s => s.Action == "overlay"))
+            {
+                shortcut.Action = "toggle-overlay";
+                if (shortcut.Label == "Overlay" || shortcut.Label.StartsWith("Mostra e focalizza", StringComparison.OrdinalIgnoreCase)) shortcut.Label = "Mostra/nascondi overlay";
+            }
             state.Validate();
             return state;
         }
@@ -109,13 +128,16 @@ public sealed class Settings
 
     public void Validate()
     {
-        if (Devices == null || Profiles == null || Shortcuts == null) throw new JsonException("Collezioni mancanti");
-        if (Devices.Any(d => d == null || string.IsNullOrEmpty(d.Id) || d.Name == null || d.Kind == null || d.Values == null || d.ControlMemory == null || d.Controls == null
+        if (Devices == null || Profiles == null || Shortcuts == null || HiddenDeviceIds == null) throw new JsonException("Collezioni mancanti");
+        if (Devices.Any(d => d == null || string.IsNullOrEmpty(d.Id) || d.Name == null || d.Kind == null || d.Values == null || d.ControlMemory == null || d.Controls == null || d.CameraProfiles == null
             || d.Values.Any(v => !double.IsFinite(v.Value)) || d.ControlMemory.Any(v => !double.IsFinite(v.Value))
+            || d.CameraProfiles.Any(p => p == null || string.IsNullOrWhiteSpace(p.Name) || p.Values == null || p.Values.Values.Any(v => !double.IsFinite(v)))
             || d.Volume is float volume && (!float.IsFinite(volume) || volume < 0 || volume > 1)))
             throw new JsonException("Dispositivo non valido");
         if (Devices.Select(d => d.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() != Devices.Count)
             throw new JsonException("ID duplicati");
+        if (HiddenDeviceIds.Any(string.IsNullOrWhiteSpace) || HiddenDeviceIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != HiddenDeviceIds.Count)
+            throw new JsonException("Elenco dispositivi dimenticati non valido");
         if (Devices.Any(d => d.Controls.Any(c => c == null || string.IsNullOrEmpty(c.Id) || c.Label == null || !double.IsFinite(c.Min)
             || !double.IsFinite(c.Max) || !double.IsFinite(c.Step) || c.Max < c.Min || c.Step <= 0)
             || d.Controls.Select(c => c.Id).Distinct().Count() != d.Controls.Count))
@@ -128,6 +150,8 @@ public sealed class Settings
             throw new JsonException("Profilo non valido");
         if (Shortcuts.Any(s => s == null || s.Gesture == null || s.Action == null || !double.IsFinite(s.Value))) throw new JsonException("Shortcut non valida");
         if (OverlayLeft.HasValue && !double.IsFinite(OverlayLeft.Value) || OverlayTop.HasValue && !double.IsFinite(OverlayTop.Value)) throw new JsonException("Posizione overlay non valida");
+        if (OverlayOrientation is not ("Horizontal" or "Vertical") || !double.IsFinite(OverlayIconSize) || OverlayIconSize is < 42 or > 68
+            || !double.IsFinite(OverlayOpacity) || OverlayOpacity is < .6 or > 1) throw new JsonException("Preferenze overlay non valide");
     }
 
     public void Save()

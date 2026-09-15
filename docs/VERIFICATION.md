@@ -3,11 +3,12 @@
 ## Eseguito localmente
 
 - Build Release con .NET SDK 8.0.425: zero errori e zero avvisi.
-- 33 controlli con `--hardware-read`: persistenza, inventario, profili, protocollo QuikLight, input, audio, monitor e rilevamento delle luci; tutti passati.
+- 38 controlli con `--hardware-read`: persistenza, inventario, profili, dispositivo dimenticato, protocollo QuikLight, direzione luminosità, raccomandazioni camera, input, audio, monitor e rilevamento luci; tutti passati.
 - Scrittura reale invariata con DX Light e Hub chiusi: luminosità e colore statico accettati dal controller USB `1A86:FE07`, senza errori.
-- Rendering delle quattro pagine WPF, layout compatto e overlay completato. La scheda luci mostra stato DX Light, interruttori, luminosità, preset, HEX/RGB e parametri sync.
+- Rendering delle cinque pagine WPF, layout compatto, overlay orizzontale/verticale e pannello espanso completato. Verificati apertura, Escape, ancoraggio e assenza della barra del titolo.
+- Anteprima AVICap collegata alla EMEET SmartCam; acquisito e analizzato un fotogramma reale 3840 × 2160. Le raccomandazioni vengono arrotondate al passo del driver prima della scrittura.
 - Passaggio operativo verificato avviando Hub dopo DX Light: importati stato acceso, sync attivo, colore `#E300FF` e 54 LED; nessun errore registrato.
-- Campione dell’EXE autonomo con sync attivo a 15 fps per 20 s: 2,109 s CPU, pari a circa 0,659% della capacità totale sui 16 thread logici del Ryzen 7 7700; working set 272,6 MiB, memoria privata 161,4 MiB, nessuna crescita nel campione.
+- Campione dell’EXE autonomo 0.5 in esecuzione con le impostazioni reali per 20 s: 0,25 s CPU, circa 0,08% della capacità totale sui 16 thread logici del Ryzen 7 7700; working set 248,8 MiB e memoria privata 158 MiB.
 
 ## Limiti della verifica
 

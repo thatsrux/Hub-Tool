@@ -1,6 +1,6 @@
 # Verifica richiesta UI e dimensioni
 
-Richiesta corrente: verificare l'iterazione interrotta, mostrare solo periferiche d'interfaccia, migliorare spazi e icone, eliminare slogan/asset superflui e sostituire l'overlay-finestra con un'icona a moduli.
+Richiesta corrente: migliorare nettamente app e overlay, usare una barra iniziale di sole icone personalizzabile, rendere gli slider fluidi e integrare anteprima e profili videocamera.
 
 ## Evidenze raccolte
 
@@ -8,8 +8,9 @@ Richiesta corrente: verificare l'iterazione interrotta, mostrare solo periferich
 - Filtro: CPU, bus, host controller USB, root hub e code radice esclusi; hub USB esterni ammessi. Raggruppamento input e deduplicazione monitor verificati.
 - Sul PC di verifica: 19 periferiche visibili, 4 endpoint audio e 2 monitor con controlli. Due record globali input restano interni al motore dei profili e non compaiono nella UI.
 - Icone vettoriali per audio/cuffie, microfoni, tastiere, mouse, monitor, webcam, hub USB, stampanti/scanner e storage. Nessun pacchetto di icone, font o immagine aggiuntivo.
-- Verifica visuale tramite rendering delle quattro pagine, layout minimo 900 × 620 e badge/moduli. Verifica della finestra nativa: WS_CAPTION assente.
-- Clic sul badge ed Escape esercitati sui gestori WPF reali; dimensione collassata 52 × 52 DIP. Posizione del badge preservata dopo l'apertura.
+- Verifica visuale tramite rendering delle cinque pagine, layout minimo 900 × 620, scheda videocamera, barra overlay e pannello dispositivo. Verifica della finestra nativa: WS_CAPTION assente.
+- Apertura ed Escape esercitati sui gestori WPF reali; ancoraggio preservato. Verificate sia la barra orizzontale sia quella verticale, con tre dispositivi e il pulsante Hub.
+- Acquisito e analizzato un fotogramma reale 3840 × 2160 dalla EMEET SmartCam tramite callback AVICap; l’anteprima resta un HWND nativo e non compare nel bitmap WPF diagnostico.
 - Eliminate le dipendenze dirette da Windows Forms e System.Drawing; resta un solo asset, l'icona eseguibile multirisoluzione (3.719 byte).
 - Campione idle senza screenshot: 20,006 s, 0 s CPU aggiuntivi misurati, 155,68 MiB working set, 97,26 MiB privati dopo 8 s di warm-up. Nessun GC forzato.
 

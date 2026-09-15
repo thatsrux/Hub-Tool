@@ -34,6 +34,8 @@ internal static class PreviewCapture
         if (App.PreviewDirectory == null) return;
         if (!App.BenchmarkOnly)
         {
+            CameraFrameAnalysis? cameraAnalysis = null;
+            string cameraAnalysisError = "";
             var tabs = (TabControl)window.FindName("Pages");
             for (int i = 0; i < tabs.Items.Count; i++)
             {
@@ -51,26 +53,46 @@ internal static class PreviewCapture
             tabs.SelectedIndex = 0; window.Width = 900; window.Height = 620;
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             Capture(window, "compact-layout");
+            if (window.FindName("DeviceList") is ListBox cameraList)
+            {
+                var camera = cameraList.Items.Cast<Device>().FirstOrDefault(d => d.Id.StartsWith("camera:") && d.Controls.Count > 0);
+                if (camera != null)
+                {
+                    cameraList.SelectedItem = camera; await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    Capture(window, "camera-detail");
+                    await Task.Delay(1200);
+                    try { cameraAnalysis = window.CaptureCameraAnalysisForDiagnostics(); } catch (Exception ex) { cameraAnalysisError = ex.Message; }
+                }
+            }
             using var overlay = new DiagnosticOverlay(window.CreateDiagnosticOverlay());
             overlay.Window.Show();
+            overlay.Window.KeepOnScreen();
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-            Capture(overlay.Window, "overlay-badge");
-            if (overlay.Window.Width != 52 || overlay.Window.Height != 52) throw new InvalidOperationException("Badge non compatto");
+            Capture(overlay.Window, "overlay-icons");
+            if (overlay.Window.Expanded || overlay.Window.IconCount < 1 || overlay.Window.Width <= overlay.Window.Height)
+                throw new InvalidOperationException("Barra icone compatta non valida");
             var hwnd = new WindowInteropHelper(overlay.Window).Handle;
             if ((Native.WindowStyle(hwnd, -16) & 0x00C00000) != 0) throw new InvalidOperationException("Overlay con barra del titolo");
             var anchor = new Point(overlay.Window.Left, overlay.Window.Top);
-            ((Button)overlay.Window.Content).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            overlay.Window.OpenFirstModuleForDiagnostics();
             if (!overlay.Window.Expanded) throw new InvalidOperationException("Il clic non apre i moduli");
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             Capture(overlay.Window, "overlay-modules");
             overlay.Window.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(overlay.Window), 0, Key.Escape)
             { RoutedEvent = Keyboard.PreviewKeyDownEvent });
-            if (overlay.Window.Expanded || overlay.Window.Width != 52) throw new InvalidOperationException("Escape non comprime l’overlay");
-            if (Math.Abs(overlay.Window.Left - anchor.X) > 1 || Math.Abs(overlay.Window.Top - anchor.Y) > 1) throw new InvalidOperationException("Il badge cambia posizione alla chiusura");
+            if (overlay.Window.Expanded || overlay.Window.Width <= overlay.Window.Height) throw new InvalidOperationException("Escape non comprime l’overlay");
+            if (Math.Abs(overlay.Window.Left - anchor.X) > 1 || Math.Abs(overlay.Window.Top - anchor.Y) > 1)
+                throw new InvalidOperationException($"La barra cambia posizione alla chiusura: {anchor.X:0},{anchor.Y:0} → {overlay.Window.Left:0},{overlay.Window.Top:0}");
+            window.SetOverlayOrientationForDiagnostics("Vertical"); overlay.Window.RefreshAppearance();
+            await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            if (overlay.Window.Width >= overlay.Window.Height) throw new InvalidOperationException("Barra icone verticale non valida");
+            Capture(overlay.Window, "overlay-icons-vertical");
             File.WriteAllText(Path.Combine(App.PreviewDirectory, "result.json"), JsonSerializer.Serialize(new
-            { Pages = tabs.Items.Count, OverlayBadge = "52x52", NativeCaption = false, ClickExpanded = true, EscapeCollapsed = true, AnchorPreserved = true, Completed = true }));
+            { Pages = tabs.Items.Count, CompactIcons = overlay.Window.IconCount, HorizontalLayout = true, VerticalLayout = true, NativeCaption = false, ClickExpanded = true, EscapeCollapsed = true, AnchorPreserved = true,
+                CameraFrameAnalyzed = cameraAnalysis.HasValue, CameraMeanLuma = cameraAnalysis?.MeanLuma, CameraAnalysisError = cameraAnalysisError, Completed = true }));
         }
         window.Hide();
+        if (App.FastPreview) { System.Windows.Application.Current.Shutdown(); return; }
         // Exclude startup/JIT and screenshot work from the idle sample.
         await Task.Delay(TimeSpan.FromSeconds(8));
         var process = System.Diagnostics.Process.GetCurrentProcess(); process.Refresh();

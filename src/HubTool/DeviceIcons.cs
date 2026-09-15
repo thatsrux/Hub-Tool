@@ -23,7 +23,8 @@ public static class DeviceIcons
         ["printer"] = Shape("M6,9 V2 H18 V9 M6,19 H2 V9 H22 V19 H18 M6,15 H18 V24 H6 Z M17,12 H19"),
         ["scanner"] = Shape("M2,14 H22 V22 H2 Z M3,14 L7,3 L22,10 M6,18 H15 M18,18 H19"),
         ["drive"] = Shape("M5,3 H19 L23,18 V23 H1 V18 Z M1,18 H23 M17,21 H19"),
-        ["gamepad"] = Shape("M7,7 H17 Q21,7 23,17 Q24,23 19,21 L15,17 H9 L5,21 Q0,23 1,17 Q3,7 7,7 Z M5,12 H11 M8,9 V15 M17,11 H18 M19,14 H20")
+        ["gamepad"] = Shape("M7,7 H17 Q21,7 23,17 Q24,23 19,21 L15,17 H9 L5,21 Q0,23 1,17 Q3,7 7,7 Z M5,12 H11 M8,9 V15 M17,11 H18 M19,14 H20"),
+        ["hub"] = Shape("M12,3 L18,7 V14 L12,18 L6,14 V7 Z M12,3 V10 M6,7 L12,10 L18,7 M12,10 V18 M4,21 H20")
     };
     private static Geometry Shape(string path) { var geometry = Geometry.Parse(path); geometry.Freeze(); return geometry; }
     public static Geometry For(string kind) => Shapes.GetValueOrDefault(kind, Shapes["usb"]);
@@ -37,5 +38,11 @@ public static class DeviceIcons
     {
         Width = size, Height = size, Child = new System.Windows.Shapes.Path { Data = For(PeripheralCatalog.Icon(device)), Stroke = Accent(PeripheralCatalog.Icon(device)),
             StrokeThickness = 1.6, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, Stretch = Stretch.Uniform, Width = 25, Height = 25 }
+    };
+    public static FrameworkElement CreateHub(double size = 22) => new Viewbox
+    {
+        Width = size, Height = size, Child = new System.Windows.Shapes.Path { Data = For("hub"), Stroke = Accent("hub"),
+            StrokeThickness = 1.7, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
+            Stretch = Stretch.Uniform, Width = 25, Height = 25 }
     };
 }

@@ -23,6 +23,8 @@ var lightFrame = QuikLightProtocol.Frame(3, Enumerable.Repeat(new LightControls.
 Check(lightPacket.SequenceEqual(new byte[] { 82, 66, 7, 2, 135, 75, 111 }) && lightFrame.Length == 277
     && lightFrame[0] == 83 && lightFrame[1] == 67 && lightFrame[5] == 128 && lightFrame[6] == 1 && lightFrame[275] == 54,
     "QuikLight commands use the controller's RB/SC framing and all 54 LED zones");
+Check(QuikLightProtocol.Brightness(0) == 100 && QuikLightProtocol.Brightness(25) == 75 && QuikLightProtocol.Brightness(100) == 0,
+    "QuikLight attenuation is inverted at the USB boundary so Hub brightness follows the conventional direction");
 Check(!PeripheralCatalog.IsPeripheral(new Device { Id = "input:Keyboard:generic", Name = "Tastiera HID", Kind = "Keyboard" })
     && !PeripheralCatalog.IsPeripheral(new Device { Id = "ROOT\\MOUSE\\0000", Name = "HID-compliant mouse", Kind = "Mouse" })
     && PeripheralCatalog.IsPeripheral(new Device { Id = InputControls.KeyboardId, Name = "Tastiera", Kind = "Keyboard" }),
@@ -46,6 +48,15 @@ Check(fallbackDisplay.Values["sidetone:volume:10:0"] == 64 && fallbackDisplay.Va
     "Sidetone fallback preserves volume while showing the disabled state");
 Check(CameraControls.PreferredDefaultFlags(3) == 1 && CameraControls.PreferredDefaultFlags(2) == 2,
     "Camera reset prefers automatic mode and falls back to manual mode");
+Check(MainWindow.SnapSliderValue(7.6, -10, 10, 3) == 8 && MainWindow.SnapSliderValue(99.9, 0, 90, 5) == 90,
+    "Slider values snap from their real minimum and stay inside driver bounds");
+var smartCamera = new Device { Id = "camera:test", Kind = "Camera",
+    Controls = [new("video:0", "Brightness", 0, 100, 1), new("video:1", "Contrast", 0, 100, 1), new("video:3", "Saturation", 0, 100, 5),
+        new("camera:4:auto", "Exposure auto", 0, 1, 1, Toggle: true)],
+    Values = new() { ["video:0"] = 45, ["video:1"] = 45, ["video:3"] = 40, ["camera:4:auto"] = 0 } };
+var enhancement = CameraControls.RecommendEnhancement(smartCamera, new CameraFrameAnalysis(62, 24, .3, .01, 60, 64, 70));
+Check(enhancement["camera:4:auto"] == 1 && enhancement["video:0"] > 45 && enhancement["video:1"] > 45
+    && (enhancement["video:3"] % 5) == 0, "Camera enhancement uses frame statistics and snaps every recommendation to driver steps");
 var grouped = PeripheralCatalog.Prepare([
     new Device { Id = "HID\\ONE", Kind = "Keyboard", Name = "Keyboard", ContainerId = "same" },
     new Device { Id = "HID\\TWO", Kind = "Keyboard", Name = "Keyboard", ContainerId = "same" },
@@ -81,6 +92,15 @@ var state = new Settings { Devices = devices };
 state.Save();
 var reloaded = Settings.Load();
 Check(reloaded.Devices.Single().Overlay && reloaded.Devices.Single().Volume == .6f, "Settings round trip preserves preferences");
+var forgotten = new Device { Id = "usb:forgotten", Name = "Forgotten", Kind = "USB", Connected = true };
+reloaded.Devices.Add(forgotten);
+using (var forgetting = new DeviceService(reloaded, controlLights: false))
+{
+    forgetting.ForgetDevice(forgotten);
+    Check(!reloaded.Devices.Contains(forgotten) && reloaded.HiddenDeviceIds.Contains("usb:forgotten"), "Forgetting removes and persistently hides a device");
+    forgetting.RestoreForgottenDevices();
+    Check(reloaded.HiddenDeviceIds.Count == 0, "Forgotten devices can be restored");
+}
 using var service = new DeviceService(reloaded);
 Check(!reloaded.Devices.Single().Connected, "Startup invalidates stale connection state");
 var profile = service.Capture("Work");

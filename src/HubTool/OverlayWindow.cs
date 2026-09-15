@@ -5,72 +5,205 @@ using System.Windows.Media;
 
 namespace HubTool;
 
-/// <summary>A small borderless badge. Device modules exist only while expanded.</summary>
+/// <summary>A compact icon dock that opens one device panel at a time.</summary>
 internal sealed class OverlayWindow : Window
 {
-    private readonly Func<StackPanel> modules;
+    private readonly Func<IReadOnlyList<Device>> getDevices;
+    private readonly Func<Device, FrameworkElement> createModule;
+    private readonly Settings settings;
     private readonly Action savePosition;
     private readonly Action returnFocus;
+    private readonly Action openSettings;
+    private Device? selected;
     private bool dragging;
     private Point pointerStart;
     private Point windowStart;
-    private Point badgeAnchor;
+    private Point dockAnchor;
     private Point dragAnchor;
-    public bool Expanded { get; private set; }
-    public Point BadgePosition => Expanded ? badgeAnchor : new Point(Left, Top);
-    public const double BadgeSize = 52;
+    public bool Expanded => selected != null;
+    public int IconCount { get; private set; }
+    public Point BadgePosition => Expanded ? dockAnchor : new Point(Left, Top);
 
-    public OverlayWindow(Func<StackPanel> modules, Action savePosition, Action returnFocus)
+    public OverlayWindow(Func<IReadOnlyList<Device>> getDevices, Func<Device, FrameworkElement> createModule, Settings settings,
+        Action savePosition, Action returnFocus, Action openSettings)
     {
-        this.modules = modules; this.savePosition = savePosition; this.returnFocus = returnFocus;
-        Title = "Hub overlay";
-        WindowStyle = WindowStyle.None;
-        ResizeMode = ResizeMode.NoResize;
-        AllowsTransparency = true;
-        Background = Brushes.Transparent;
-        Foreground = Brushes.White;
-        ShowInTaskbar = false; ShowActivated = false; Topmost = true;
-        UseLayoutRounding = true;
-        PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { SetExpanded(false); returnFocus(); e.Handled = true; } };
-        Deactivated += (_, _) => { if (Expanded && !IsMouseOver) SetExpanded(false); };
-        SetExpanded(false);
+        this.getDevices = getDevices; this.createModule = createModule; this.settings = settings;
+        this.savePosition = savePosition; this.returnFocus = returnFocus; this.openSettings = openSettings;
+        Title = "Hub overlay"; WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
+        AllowsTransparency = true; Background = Brushes.Transparent; Foreground = Brushes.White;
+        ShowInTaskbar = false; ShowActivated = false; UseLayoutRounding = true;
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            if (Expanded) Collapse(); else Close();
+            returnFocus(); e.Handled = true;
+        };
+        Deactivated += (_, _) => { if (Expanded && settings.OverlayAutoCollapse && !IsMouseOver) Collapse(); };
+        RefreshAppearance();
     }
 
-    public void RefreshModules() { if (Expanded) Render(); }
-
-    public void SetExpanded(bool expanded)
+    public void RefreshModules()
     {
-        bool wasExpanded = Expanded;
-        if (expanded && !wasExpanded) badgeAnchor = new Point(Left, Top);
-        Expanded = expanded;
-        Width = expanded ? 352 : BadgeSize;
-        SizeToContent = expanded ? SizeToContent.Height : SizeToContent.Manual;
-        if (!expanded) Height = BadgeSize;
+        if (selected != null && !getDevices().Any(d => d.Id == selected.Id)) selected = null;
         Render();
-        if (wasExpanded && !expanded) { Left = badgeAnchor.X; Top = badgeAnchor.Y; }
-        if (IsVisible)
-        {
-            UpdateLayout();
-            if (expanded && !wasExpanded) { Left = badgeAnchor.X + BadgeSize - ActualWidth; Top = badgeAnchor.Y + BadgeSize - ActualHeight; }
-            if (App.PreviewDirectory == null) KeepOnScreen();
-        }
+    }
+
+    public void RefreshAppearance()
+    {
+        Topmost = settings.OverlayAlwaysOnTop; Opacity = settings.OverlayOpacity;
+        if (Expanded) dockAnchor = BadgePosition;
+        Render();
+        if (IsVisible) KeepOnScreen();
+    }
+
+    public void Collapse()
+    {
+        if (!Expanded) return;
+        selected = null; Render(); Left = dockAnchor.X; Top = dockAnchor.Y; UpdateLayout(); KeepOnScreen();
+    }
+
+    internal void OpenFirstModuleForDiagnostics()
+    {
+        var first = getDevices().FirstOrDefault();
+        if (first != null) Open(first);
     }
 
     public void KeepOnScreen()
     {
         var area = WorkArea();
-        Left = Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - ActualWidth));
-        Top = Math.Clamp(Top, area.Top, Math.Max(area.Top, area.Bottom - ActualHeight));
-        if (Expanded) badgeAnchor = new Point(Math.Clamp(badgeAnchor.X, area.Left, area.Right - BadgeSize), Math.Clamp(badgeAnchor.Y, area.Top, area.Bottom - BadgeSize));
+        var currentSize = Expanded ? new Size(ActualWidth, ActualHeight) : CompactSize();
+        Left = Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - currentSize.Width));
+        Top = Math.Clamp(Top, area.Top, Math.Max(area.Top, area.Bottom - currentSize.Height));
+        if (Expanded)
+        {
+            var compact = CompactSize();
+            dockAnchor = new Point(Math.Clamp(dockAnchor.X, area.Left, area.Right - compact.Width), Math.Clamp(dockAnchor.Y, area.Top, area.Bottom - compact.Height));
+        }
         savePosition();
+    }
+
+    private void Open(Device device)
+    {
+        if (selected?.Id == device.Id) { Collapse(); return; }
+        if (!Expanded) dockAnchor = new Point(Left, Top);
+        selected = device; Render();
+        if (IsVisible)
+        {
+            UpdateLayout(); PositionExpanded();
+            if (App.PreviewDirectory == null) { KeepOnScreen(); Activate(); Focus(); }
+        }
+    }
+
+    private void PositionExpanded()
+    {
+        var area = WorkArea(); var compact = CompactSize();
+        if (settings.OverlayOrientation == "Vertical")
+        {
+            var dockRight = dockAnchor.X + compact.Width / 2 > area.Left + area.Width / 2;
+            Left = dockRight ? dockAnchor.X + compact.Width - ActualWidth : dockAnchor.X;
+            Top = Math.Clamp(dockAnchor.Y, area.Top, Math.Max(area.Top, area.Bottom - ActualHeight));
+        }
+        else
+        {
+            var dockBottom = dockAnchor.Y + compact.Height / 2 > area.Top + area.Height / 2;
+            Left = Math.Clamp(dockAnchor.X, area.Left, Math.Max(area.Left, area.Right - ActualWidth));
+            Top = dockBottom ? dockAnchor.Y + compact.Height - ActualHeight : dockAnchor.Y;
+        }
+    }
+
+    private void Render()
+    {
+        var devices = getDevices(); IconCount = devices.Count;
+        var rail = CreateRail(devices);
+        if (!Expanded)
+        {
+            var size = CompactSize(); Width = size.Width; Height = size.Height; SizeToContent = SizeToContent.Manual;
+            Content = rail; return;
+        }
+
+        var area = WorkArea();
+        SizeToContent = SizeToContent.WidthAndHeight; ClearValue(WidthProperty); ClearValue(HeightProperty);
+        var card = new Grid { Width = 374, MaxHeight = Math.Max(280, Math.Min(610, area.Height - 34)) };
+        card.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); card.RowDefinitions.Add(new RowDefinition());
+        var header = new Grid { Margin = new Thickness(4, 2, 2, 12) };
+        header.ColumnDefinitions.Add(new ColumnDefinition()); header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var title = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        title.Children.Add(DeviceIcons.Create(selected!, 20));
+        title.Children.Add(new TextBlock { Text = selected!.Name, FontWeight = FontWeights.SemiBold, FontSize = 14,
+            Margin = new Thickness(9, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 260 });
+        header.Children.Add(title);
+        var close = new Button { Content = "×", ToolTip = "Comprimi", Width = 32, Height = 30, Padding = new Thickness(0), Margin = new Thickness(0), FontSize = 18 };
+        close.Click += (_, _) => { Collapse(); returnFocus(); }; Grid.SetColumn(close, 1); header.Children.Add(close); card.Children.Add(header);
+        var scroll = new ScrollViewer { Content = createModule(selected), VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(2, 0, 5, 3) };
+        Grid.SetRow(scroll, 1); card.Children.Add(scroll);
+        var surface = new Border { Background = Brush("#F20E1826"), BorderBrush = Brush("#52677F"), BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(16), Padding = new Thickness(13), Margin = new Thickness(8), Child = card };
+
+        if (settings.OverlayOrientation == "Vertical")
+        {
+            var grid = new Grid(); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); grid.ColumnDefinitions.Add(new ColumnDefinition());
+            var right = dockAnchor.X > area.Left + area.Width / 2;
+            Grid.SetColumn(rail, right ? 1 : 0); Grid.SetColumn(surface, right ? 0 : 1); grid.Children.Add(surface); grid.Children.Add(rail);
+            grid.MinWidth = CompactSize().Width + 406; grid.MaxHeight = Math.Min(620, area.Height - 20); Content = grid;
+        }
+        else
+        {
+            var grid = new Grid(); grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); grid.RowDefinitions.Add(new RowDefinition());
+            var bottom = dockAnchor.Y > area.Top + area.Height / 2;
+            Grid.SetRow(rail, bottom ? 1 : 0); Grid.SetRow(surface, bottom ? 0 : 1); grid.Children.Add(surface); grid.Children.Add(rail);
+            grid.MinWidth = Math.Max(CompactSize().Width, 406); grid.MaxHeight = Math.Min(620, area.Height - 20); Content = grid;
+        }
+    }
+
+    private Border CreateRail(IReadOnlyList<Device> devices)
+    {
+        var horizontal = settings.OverlayOrientation == "Horizontal";
+        var stack = new StackPanel { Orientation = horizontal ? Orientation.Horizontal : Orientation.Vertical };
+        foreach (var device in devices)
+        {
+            var button = IconButton(DeviceIcons.Create(device, settings.OverlayIconSize * .48), device.Name, selected?.Id == device.Id);
+            button.Click += (_, _) => Open(device); stack.Children.Add(button);
+        }
+        if (devices.Count == 0)
+        {
+            var empty = IconButton(DeviceIcons.CreateHub(22), "Apri Hub per scegliere i dispositivi", false);
+            empty.Click += (_, _) => openSettings(); stack.Children.Add(empty);
+        }
+        var settingsButton = IconButton(DeviceIcons.CreateHub(settings.OverlayIconSize * .46), "Impostazioni overlay", false);
+        settingsButton.Click += (_, _) => openSettings(); stack.Children.Add(settingsButton);
+        var border = new Border { Background = Brush("#F20C1624"), BorderBrush = Brush("#52677F"), BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(16), Padding = new Thickness(5), Child = stack, ToolTip = "Trascina lo spazio intorno alle icone per spostare",
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        var menu = new ContextMenu();
+        var open = new MenuItem { Header = "Apri Hub e impostazioni overlay" }; open.Click += (_, _) => openSettings(); menu.Items.Add(open);
+        var orientation = new MenuItem { Header = horizontal ? "Disponi in verticale" : "Disponi in orizzontale" };
+        orientation.Click += (_, _) => { settings.OverlayOrientation = horizontal ? "Vertical" : "Horizontal"; settings.Save(); RefreshAppearance(); };
+        menu.Items.Add(orientation); menu.Items.Add(new Separator());
+        var hide = new MenuItem { Header = "Nascondi overlay" }; hide.Click += (_, _) => Close(); menu.Items.Add(hide); border.ContextMenu = menu;
+        AddDrag(border); return border;
+    }
+
+    private Button IconButton(object content, string tooltip, bool active)
+    {
+        var size = settings.OverlayIconSize;
+        var button = new Button { Width = size, Height = size, Padding = new Thickness(0), Margin = new Thickness(2), Content = content,
+            ToolTip = tooltip, Background = active ? Brush("#315D60") : Brushes.Transparent };
+        button.SetResourceReference(StyleProperty, "OverlayIconButton");
+        System.Windows.Automation.AutomationProperties.SetName(button, tooltip); return button;
+    }
+
+    private Size CompactSize()
+    {
+        var count = Math.Max(1, getDevices().Count) + 1; var extent = count * (settings.OverlayIconSize + 4) + 10;
+        return settings.OverlayOrientation == "Horizontal" ? new Size(extent, settings.OverlayIconSize + 10) : new Size(settings.OverlayIconSize + 10, extent);
     }
 
     private Rect WorkArea()
     {
         var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
         if (hwnd == IntPtr.Zero) return SystemParameters.WorkArea;
-        var area = Native.WorkArea(hwnd);
-        var source = PresentationSource.FromVisual(this);
+        var area = Native.WorkArea(hwnd); var source = PresentationSource.FromVisual(this);
         var transform = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         return new Rect(transform.Transform(new Point(area.Left, area.Top)), transform.Transform(new Point(area.Right, area.Bottom)));
     }
@@ -79,58 +212,30 @@ internal sealed class OverlayWindow : Window
     {
         target.PreviewMouseLeftButtonDown += (_, e) =>
         {
-            dragging = false; pointerStart = PointToScreen(e.GetPosition(this)); windowStart = new Point(Left, Top); dragAnchor = BadgePosition;
+            if (FindParent<Button>(e.OriginalSource as DependencyObject) != null) return;
+            target.CaptureMouse(); dragging = false; pointerStart = PointToScreen(e.GetPosition(this)); windowStart = new Point(Left, Top); dragAnchor = BadgePosition;
         };
         target.PreviewMouseMove += (_, e) =>
         {
             if (e.LeftButton != MouseButtonState.Pressed || !target.IsMouseCaptured) return;
             var point = PointToScreen(e.GetPosition(this)); var delta = point - pointerStart;
             if (!dragging && Math.Abs(delta.X) + Math.Abs(delta.Y) < 5) return;
-            dragging = true;
-            var dpi = VisualTreeHelper.GetDpi(this);
+            dragging = true; var dpi = VisualTreeHelper.GetDpi(this);
             Left = windowStart.X + delta.X / dpi.DpiScaleX; Top = windowStart.Y + delta.Y / dpi.DpiScaleY;
-            if (Expanded) badgeAnchor = new Point(dragAnchor.X + delta.X / dpi.DpiScaleX, dragAnchor.Y + delta.Y / dpi.DpiScaleY);
+            if (Expanded) dockAnchor = new Point(dragAnchor.X + delta.X / dpi.DpiScaleX, dragAnchor.Y + delta.Y / dpi.DpiScaleY);
         };
         target.PreviewMouseLeftButtonUp += (_, e) =>
         {
-            if (!dragging) return;
-            target.ReleaseMouseCapture(); KeepOnScreen(); dragging = false; e.Handled = true;
+            if (!target.IsMouseCaptured) return;
+            target.ReleaseMouseCapture(); if (dragging) { KeepOnScreen(); e.Handled = true; } dragging = false;
         };
     }
 
-    private void Render()
+    private static T? FindParent<T>(DependencyObject? value) where T : DependencyObject
     {
-        if (!Expanded)
-        {
-            var badge = new Button
-            {
-                Width = 48, Height = 48, Padding = new Thickness(0), Margin = new Thickness(2),
-                Background = (Brush)new BrushConverter().ConvertFromString("#173B39")!,
-                Foreground = (Brush)new BrushConverter().ConvertFromString("#76F4D3")!,
-                Content = new TextBlock { Text = "H", FontSize = 24, FontWeight = FontWeights.Bold },
-                ToolTip = "Hub · clic per aprire, trascina per spostare"
-            };
-            System.Windows.Automation.AutomationProperties.SetName(badge, "Apri moduli Hub");
-            badge.SetResourceReference(StyleProperty, "BadgeButton");
-            var menu = new ContextMenu();
-            var hide = new MenuItem { Header = "Nascondi overlay" }; hide.Click += (_, _) => Close();
-            menu.Items.Add(hide); badge.ContextMenu = menu;
-            badge.Click += (_, _) => { SetExpanded(true); if (App.PreviewDirectory == null) Activate(); };
-            AddDrag(badge);
-            Content = badge;
-            return;
-        }
-        var panel = new StackPanel();
-        var header = new DockPanel { Margin = new Thickness(2, 0, 2, 8) };
-        var collapse = new Button { Content = "−", ToolTip = "Comprimi overlay", Padding = new Thickness(10, 2, 10, 4), Margin = new Thickness(0) };
-        collapse.Click += (_, _) => { SetExpanded(false); returnFocus(); };
-        DockPanel.SetDock(collapse, Dock.Right); header.Children.Add(collapse);
-        var drag = new Button { Content = "HUB", HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(4, 6, 4, 6),
-            Margin = new Thickness(0), Background = Brushes.Transparent, FontWeight = FontWeights.Bold, FontSize = 12 };
-        AddDrag(drag); header.Children.Add(drag); panel.Children.Add(header);
-        panel.Children.Add(new ScrollViewer { Content = modules(), VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, MaxHeight = Math.Max(100, Math.Min(570, WorkArea().Height - 90)) });
-        Content = new Border { Background = (Brush)new BrushConverter().ConvertFromString("#0F1825")!, CornerRadius = new CornerRadius(14),
-            BorderBrush = (Brush)new BrushConverter().ConvertFromString("#34485F")!, BorderThickness = new Thickness(1), Padding = new Thickness(12), Child = panel };
+        while (value != null) { if (value is T result) return result; value = VisualTreeHelper.GetParent(value); }
+        return null;
     }
+
+    private static Brush Brush(string value) => (Brush)new BrushConverter().ConvertFromString(value)!;
 }

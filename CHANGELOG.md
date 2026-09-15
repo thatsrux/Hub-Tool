@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0 — 2026-09-15
+
+- Ridisegnata l’intera interfaccia con superfici, controlli, stati focus e icona Hub vettoriale più leggibili.
+- Sostituito il vecchio badge overlay con una barra di icone orizzontale o verticale: ogni icona apre soltanto il relativo dispositivo in un pannello compatto e rifinito.
+- Aggiunta la pagina Overlay per orientamento, dimensione icone, opacità, primo piano, compressione automatica, posizione e scelta dei dispositivi.
+- `Ctrl+Alt+H` ora mostra o nasconde l’overlay; la vecchia shortcut viene migrata automaticamente.
+- Aggiunta la rimozione persistente di un dispositivo con recupero dalla pagina Overlay; vengono puliti anche i riferimenti in profili e shortcut.
+- Corretta la luminosità QuikLight: Hub converte il valore di attenuazione USB, quindi 0% indica il minimo e 100% il massimo.
+- Slider ingranditi e resi fluidi: click diretto sul punto, trascinamento continuo, applicazione live limitata a 110 ms e discretizzazione esatta sul passo del driver.
+- Aggiunta anteprima live nativa nella scheda videocamera, senza framework video aggiuntivi.
+- Aggiunto “Enhance with AI”: analisi locale del fotogramma e ottimizzazione dei controlli immagine e delle modalità automatiche supportate.
+- Aggiunti profili immagine distinti per ogni videocamera, con salvataggio, applicazione ed eliminazione.
+
 ## 0.4.0 — 2026-09-15
 
 - Aggiunto il dispositivo “Luci dietro al monitor” per il controller DX Light/QuikLight USB `1A86:FE07`, rilevato e controllato direttamente via HID.

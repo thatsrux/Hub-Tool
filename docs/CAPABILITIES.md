@@ -1,4 +1,4 @@
-# Copertura effettiva — 0.4.0
+# Copertura effettiva — 0.5.0
 
 | Categoria | Rilevamento | Controlli diretti | Limiti |
 |---|---|---|---|
@@ -8,7 +8,7 @@
 | Mouse | PnP + preferenze Windows | Velocità, doppio clic, rotella, scambio pulsanti | Preferenze globali; DPI, polling rate, pulsanti firmware e RGB non integrati |
 | Tastiere | PnP + preferenze Windows | Velocità e ritardo ripetizione | Preferenze globali; rimappatura per dispositivo, macro e RGB non integrati |
 | Monitor | PnP + monitor fisici Windows | Luminosità e contrasto se DDC/CI risponde | Alcuni pannelli interni, dock e driver non espongono questi controlli; WMI brightness non ancora integrata |
-| Webcam | PnP + DirectShow | Esposizione, fuoco, zoom, pan/tilt, luminosità, contrasto e altri controlli standard; ripristino collettivo ai default del driver | Nessuna cattura video; estensioni proprietarie non integrate; valori/auto disponibili solo quando supportati |
+| Webcam | PnP + DirectShow/AVICap | Anteprima live; esposizione, fuoco, zoom, pan/tilt, luminosità, contrasto e altri controlli standard; reset, Enhance locale e profili immagine per camera | Estensioni e DSP proprietari non integrati; valori/auto disponibili solo quando supportati; una camera già occupata da un’altra app può rifiutare l’anteprima |
 | Luci monitor | USB HID `1A86:FE07` | Accensione, RGB/HEX, preset, luminosità; sync dei bordi dello schermo su 54 zone con fps, saturazione e smoothing | Verificato sul controller Robobloq firmware 1.9.4; cattura dello schermo primario; altri controller RGB richiedono provider dedicati |
 | Controller | PnP | Inventario e preferenze overlay | Test input, vibrazione, deadzone e rimappature non ancora integrati |
 | Stampanti | PnP | Apertura pannello stampanti | Code e preferenze specifiche non integrate |
@@ -17,7 +17,7 @@
 
 ## Persistenza
 
-Gli ID vengono confrontati senza distinzione maiuscole/minuscole. La disconnessione conserva il record. Il ripristino è esplicito; i profili includono audio e tutti i controlli implementati. Un errore di un driver viene segnalato; non viene presentato come successo completo. La modifica della porta o del driver può produrre un nuovo ID: l'associazione manuale fra vecchio e nuovo ID è ancora da implementare.
+Gli ID vengono confrontati senza distinzione maiuscole/minuscole. La disconnessione conserva il record. Un dispositivo dimenticato resta escluso finché l’utente non ripristina l’elenco; i riferimenti in profili e shortcut vengono eliminati. Il ripristino è esplicito; i profili includono audio e tutti i controlli implementati. I profili immagine sono legati al record persistente della singola camera. Un errore di un driver viene segnalato; non viene presentato come successo completo.
 
 ## Estensione
 

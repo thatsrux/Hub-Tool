@@ -80,7 +80,8 @@ public sealed class DeviceService : IDisposable
                 catch (Exception ex) { Errors.Add(endpoint.ID + ": " + ex.Message); }
             }
         }
-        found = PeripheralCatalog.Prepare(found);
+        var hidden = State.HiddenDeviceIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        found = PeripheralCatalog.Prepare(found).Where(d => !hidden.Contains(d.Id) && (d.PhysicalId.Length == 0 || !hidden.Contains(d.PhysicalId))).ToList();
         foreach (var current in found.Where(d => d.PhysicalId.Length > 0))
         {
             var old = State.Devices.FirstOrDefault(d => d.Id.Equals(current.PhysicalId, StringComparison.OrdinalIgnoreCase));
@@ -105,6 +106,26 @@ public sealed class DeviceService : IDisposable
         }
         State.Save();
         UpdateAudioSubscriptions();
+    }
+
+    public void ForgetDevice(Device device)
+    {
+        if (!State.HiddenDeviceIds.Contains(device.Id, StringComparer.OrdinalIgnoreCase)) State.HiddenDeviceIds.Add(device.Id);
+        if (device.PhysicalId.Length > 0 && !State.HiddenDeviceIds.Contains(device.PhysicalId, StringComparer.OrdinalIgnoreCase)) State.HiddenDeviceIds.Add(device.PhysicalId);
+        State.Devices.RemoveAll(d => d.Id.Equals(device.Id, StringComparison.OrdinalIgnoreCase));
+        foreach (var profile in State.Profiles)
+        {
+            profile.Audio.Remove(device.Id); profile.Controls.Remove(device.Id);
+        }
+        State.Shortcuts.RemoveAll(s => s.DeviceId.Equals(device.Id, StringComparison.OrdinalIgnoreCase));
+        if (device.Id == LightControls.DeviceId && controlLights) lights.Attach(null);
+        State.Save(); UpdateAudioSubscriptions();
+    }
+
+    public void RestoreForgottenDevices()
+    {
+        State.HiddenDeviceIds.Clear();
+        State.Save();
     }
 
     private void UpdateAudioSubscriptions()

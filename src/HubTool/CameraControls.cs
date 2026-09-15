@@ -37,7 +37,7 @@ public static class CameraControls
     private delegate int ValueGetter(int property, out int value, out int flags);
     private delegate int ValueSetter(int property, int value, int flags);
     private static readonly string[] CameraNames = ["Pan", "Tilt", "Rotazione", "Zoom", "Esposizione (log₂ secondi)", "Iris", "Messa a fuoco"];
-    private static readonly string[] VideoNames = ["Luminosità", "Contrasto", "Tonalità", "Saturazione", "Nitidezza", "Gamma", "Bilanciamento del bianco", "Colore", "Compensazione controluce", "Gain video"];
+    private static readonly string[] VideoNames = ["Luminosità", "Contrasto", "Tonalità", "Saturazione", "Nitidezza", "Gamma", "Attiva colore", "Bilanciamento del bianco", "Compensazione controluce", "Gain video"];
 
     private static void Visit(Action<string, string, IMoniker> visit)
     {
@@ -106,6 +106,38 @@ public static class CameraControls
     }
 
     public static int PreferredDefaultFlags(int caps) => (caps & 1) != 0 ? 1 : 2;
+
+    internal static Dictionary<string, double> RecommendEnhancement(Device device, CameraFrameAnalysis frame)
+    {
+        var result = new Dictionary<string, double>();
+        foreach (var automatic in new[] { "camera:4:auto", "camera:6:auto", "video:7:auto" })
+            if (device.Controls.Any(c => c.Id == automatic)) result[automatic] = 1;
+
+        foreach (var control in device.Controls.Where(c => !c.Toggle))
+        {
+            if (result.ContainsKey(control.Id + ":auto")) continue;
+            var current = device.Values.GetValueOrDefault(control.Id, (control.Min + control.Max) / 2);
+            double normalized = (current - control.Min) / Math.Max(1, control.Max - control.Min);
+            double? target = control.Id switch
+            {
+                "video:0" => normalized + (128 - frame.MeanLuma) / 255 * .55,
+                "video:1" => normalized + (48 - frame.Contrast) / 110,
+                "video:3" => .58,
+                "video:4" => .6,
+                "video:5" => frame.MeanLuma < 95 ? .58 : .48,
+                "video:6" => 1,
+                "video:7" => normalized + (frame.MeanBlue - frame.MeanRed) / 255 * .4,
+                "video:8" => frame.DarkRatio > .18 ? .75 : .25,
+                "video:9" => frame.MeanLuma < 82 ? .62 : frame.MeanLuma < 115 ? .42 : .25,
+                _ => null
+            };
+            if (target.HasValue) result[control.Id] = Snap(control, control.Min + Math.Clamp(target.Value, 0, 1) * (control.Max - control.Min));
+        }
+        return result;
+    }
+
+    internal static double Snap(DeviceControl control, double value) => Math.Clamp(
+        control.Min + Math.Round((value - control.Min) / control.Step, MidpointRounding.AwayFromZero) * control.Step, control.Min, control.Max);
 
     private static int ResetProperties(string[] labels, RangeGetter range, ValueSetter write, List<string> errors)
     {
