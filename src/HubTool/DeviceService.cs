@@ -202,7 +202,7 @@ public sealed class DeviceService : IDisposable
                 if (key == "decibels") endpoint.AudioEndpointVolume.MasterVolumeLevel = (float)value;
                 else if (key.StartsWith("channel:") && int.TryParse(key[8..], out int index) && index >= 0 && index < endpoint.AudioEndpointVolume.Channels.Count)
                     endpoint.AudioEndpointVolume.Channels[index].VolumeLevelScalar = (float)value / 100;
-                else if (AudioTopologyControls.IsSidetone(key)) AudioTopologyControls.Set(endpoint, key, value);
+                else if (AudioTopologyControls.IsSidetone(key)) AudioTopologyControls.Set(endpoint, device, key, value);
                 else throw new NotSupportedException(key);
                 ReadAudio(device);
                 return;
@@ -290,6 +290,7 @@ public static class DeviceInventory
             if (device.Restore && !connected.Contains(device.Id)) device.Pending ??= DeviceRequest.Snapshot(device);
             if (device.Pending != null) restore.Add(device);
             device.Volume = current.Volume; device.Muted = current.Muted; device.Values = current.Values;
+            AudioTopologyControls.RestoreDisplayState(device);
         }
         return restore;
     }

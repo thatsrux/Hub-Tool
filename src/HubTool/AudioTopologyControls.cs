@@ -9,6 +9,7 @@ public static class AudioTopologyControls
     private static readonly Guid MuteSubtype = new("02B223C0-C557-11D0-8A2B-00A0C9255AC1");
     private const string VolumePrefix = "sidetone:volume:";
     private const string EnabledPrefix = "sidetone:enabled:";
+    private const string FallbackActive = "sidetone:fallback-active";
 
     public static bool IsSidetone(string key) => key.StartsWith("sidetone:", StringComparison.Ordinal);
 
@@ -60,30 +61,97 @@ public static class AudioTopologyControls
             if (item.Kind == "volume" && part.AudioVolumeLevel is { } volume && item.Channel < volume.ChannelCount)
             {
                 volume.GetLevelRange(item.Channel, out float min, out float max, out _);
-                device.Values[item.Control.Id] = LevelToPercent(volume.GetLevel(item.Channel), min, max);
+                if (IsFallbackActive(device) && device.ControlMemory.TryGetValue(item.Control.Id, out var remembered))
+                    device.Values[item.Control.Id] = remembered;
+                else device.Values[item.Control.Id] = LevelToPercent(volume.GetLevel(item.Channel), min, max);
             }
             else if (item.Kind == "enabled" && part.AudioMute is { } mute)
-                device.Values[item.Control.Id] = mute.IsMuted ? 0 : 1;
+                device.Values[item.Control.Id] = IsFallbackActive(device) ? 0 : mute.IsMuted ? 0 : 1;
         }
     }
 
-    public static void Set(MMDevice endpoint, string key, double value)
+    public static void Set(MMDevice endpoint, Device device, string key, double value)
     {
         if (!TryParse(key, out var kind, out uint partId, out uint channel)) throw new NotSupportedException(key);
         var part = FindPart(endpoint, partId) ?? throw new NotSupportedException("Controllo eco microfono non più esposto dal driver");
         if (kind == "enabled" && part.AudioMute is { } mute)
         {
-            mute.IsMuted = value < .5;
+            bool enable = value >= .5;
+            if (IsFallbackActive(device))
+            {
+                if (enable) RestoreFallbackVolume(endpoint, device);
+                device.Values[key] = enable ? 1 : 0;
+                return;
+            }
+            bool muteApplied;
+            try { mute.IsMuted = !enable; muteApplied = mute.IsMuted == !enable; }
+            catch when (!enable) { muteApplied = false; }
+            if (!muteApplied)
+            {
+                if (!enable) DisableWithVolumeFallback(endpoint, device);
+                else RestoreFallbackVolume(endpoint, device);
+            }
+            device.Values[key] = enable ? 1 : 0;
             return;
         }
         if (kind == "volume" && part.AudioVolumeLevel is { } volume && channel < volume.ChannelCount)
         {
+            if (IsFallbackActive(device))
+            {
+                device.ControlMemory[key] = value;
+                device.Values[key] = value;
+                return;
+            }
             volume.GetLevelRange(channel, out float min, out float max, out _);
             var level = PercentToLevel(value, min, max);
             volume.SetLevel(channel, level);
             return;
         }
         throw new NotSupportedException(key);
+    }
+
+    public static void RestoreDisplayState(Device device)
+    {
+        if (!IsFallbackActive(device)) return;
+        foreach (var control in device.Controls.Where(c => c.Id.StartsWith(VolumePrefix, StringComparison.Ordinal)))
+            if (device.ControlMemory.TryGetValue(control.Id, out var remembered)) device.Values[control.Id] = remembered;
+        foreach (var control in device.Controls.Where(c => c.Id.StartsWith(EnabledPrefix, StringComparison.Ordinal)))
+            device.Values[control.Id] = 0;
+    }
+
+    private static bool IsFallbackActive(Device device) => device.ControlMemory.TryGetValue(FallbackActive, out var active) && active != 0;
+
+    private static void DisableWithVolumeFallback(MMDevice endpoint, Device device)
+    {
+        bool lowered = false;
+        foreach (var control in device.Controls.Where(c => c.Id.StartsWith(VolumePrefix, StringComparison.Ordinal)))
+        {
+            if (!TryParse(control.Id, out _, out uint partId, out uint channel)) continue;
+            var part = FindPart(endpoint, partId);
+            var volume = part?.AudioVolumeLevel;
+            if (volume == null || channel >= volume.ChannelCount) continue;
+            volume.GetLevelRange(channel, out float min, out float max, out _);
+            var current = LevelToPercent(volume.GetLevel(channel), min, max);
+            device.ControlMemory[control.Id] = current;
+            volume.SetLevel(channel, min);
+            lowered = true;
+        }
+        if (!lowered) throw new NotSupportedException("Il driver non accetta il mute e non espone un volume sidetone utilizzabile");
+        device.ControlMemory[FallbackActive] = 1;
+    }
+
+    private static void RestoreFallbackVolume(MMDevice endpoint, Device device)
+    {
+        foreach (var control in device.Controls.Where(c => c.Id.StartsWith(VolumePrefix, StringComparison.Ordinal)))
+        {
+            if (!TryParse(control.Id, out _, out uint partId, out uint channel) || !device.ControlMemory.TryGetValue(control.Id, out var remembered)) continue;
+            var part = FindPart(endpoint, partId);
+            var volume = part?.AudioVolumeLevel;
+            if (volume == null || channel >= volume.ChannelCount) continue;
+            volume.GetLevelRange(channel, out float min, out float max, out _);
+            volume.SetLevel(channel, PercentToLevel(remembered, min, max));
+        }
+        device.ControlMemory.Remove(FallbackActive);
     }
 
     public static double LevelToPercent(float level, float min, float max) =>

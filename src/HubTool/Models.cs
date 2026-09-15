@@ -32,6 +32,7 @@ public sealed class Device : INotifyPropertyChanged
     public float? Volume { get => volume; set { if (volume == value) return; volume = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Volume))); } }
     public bool Muted { get => muted; set { if (muted == value) return; muted = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Muted))); } }
     public Dictionary<string, double> Values { get; set; } = new();
+    public Dictionary<string, double> ControlMemory { get; set; } = new();
     public DeviceRequest? Pending { get; set; }
     public List<DeviceControl> Controls { get; set; } = new();
     public string Manufacturer { get; set; } = "";
@@ -109,8 +110,9 @@ public sealed class Settings
     public void Validate()
     {
         if (Devices == null || Profiles == null || Shortcuts == null) throw new JsonException("Collezioni mancanti");
-        if (Devices.Any(d => d == null || string.IsNullOrEmpty(d.Id) || d.Name == null || d.Kind == null || d.Values == null || d.Controls == null
-            || d.Values.Any(v => !double.IsFinite(v.Value)) || d.Volume is float volume && (!float.IsFinite(volume) || volume < 0 || volume > 1)))
+        if (Devices.Any(d => d == null || string.IsNullOrEmpty(d.Id) || d.Name == null || d.Kind == null || d.Values == null || d.ControlMemory == null || d.Controls == null
+            || d.Values.Any(v => !double.IsFinite(v.Value)) || d.ControlMemory.Any(v => !double.IsFinite(v.Value))
+            || d.Volume is float volume && (!float.IsFinite(volume) || volume < 0 || volume > 1)))
             throw new JsonException("Dispositivo non valido");
         if (Devices.Select(d => d.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() != Devices.Count)
             throw new JsonException("ID duplicati");

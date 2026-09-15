@@ -20,6 +20,15 @@ Check(PeripheralCatalog.Icon(new Device { Kind = "Uscita audio", AudioFormFactor
 Check(Math.Abs(AudioTopologyControls.LevelToPercent(12, 0, 16) - 75) < .001
     && Math.Abs(AudioTopologyControls.PercentToLevel(63, 0, 16) - 10.08) < .001
     && AudioTopologyControls.IsSidetone("sidetone:enabled:12"), "Sidetone values map safely between driver levels and UI percent");
+var fallbackDisplay = new Device
+{
+    Controls = [new("sidetone:volume:10:0", "Volume", 0, 100, 1), new("sidetone:enabled:11", "Enabled", 0, 1, 1, Toggle: true)],
+    Values = new() { ["sidetone:volume:10:0"] = 0, ["sidetone:enabled:11"] = 1 },
+    ControlMemory = new() { ["sidetone:fallback-active"] = 1, ["sidetone:volume:10:0"] = 64 }
+};
+AudioTopologyControls.RestoreDisplayState(fallbackDisplay);
+Check(fallbackDisplay.Values["sidetone:volume:10:0"] == 64 && fallbackDisplay.Values["sidetone:enabled:11"] == 0,
+    "Sidetone fallback preserves volume while showing the disabled state");
 var grouped = PeripheralCatalog.Prepare([
     new Device { Id = "HID\\ONE", Kind = "Keyboard", Name = "Keyboard", ContainerId = "same" },
     new Device { Id = "HID\\TWO", Kind = "Keyboard", Name = "Keyboard", ContainerId = "same" },
@@ -114,6 +123,15 @@ if (args.Contains("--hardware-read"))
         Check(sidetoneControls.Count >= 2, "Fifine playback topology exposes microphone sidetone controls");
         foreach (var control in sidetoneControls) await live.SetControlAsync(fifineOutput, control.Id, fifineOutput.Values[control.Id]);
         Check(sidetoneControls.All(c => fifineOutput.Values.ContainsKey(c.Id)), "Sidetone controls accept a no-change hardware write");
+        if (args.Contains("--sidetone-toggle"))
+        {
+            var enabled = sidetoneControls.Single(c => c.Id.StartsWith("sidetone:enabled:", StringComparison.Ordinal));
+            var original = fifineOutput.Values[enabled.Id];
+            await live.SetControlAsync(fifineOutput, enabled.Id, original == 0 ? 1 : 0);
+            Check(fifineOutput.Values[enabled.Id] != original, "Sidetone toggle changes the effective hardware state");
+            await live.SetControlAsync(fifineOutput, enabled.Id, original);
+            Check(fifineOutput.Values[enabled.Id] == original, "Sidetone toggle restores its initial hardware state");
+        }
     }
     Console.WriteLine(JsonSerializer.Serialize(new { Devices = liveState.Devices.Count,
         Audio = liveState.Devices.Count(d => d.Volume.HasValue),

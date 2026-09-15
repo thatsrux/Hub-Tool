@@ -2,7 +2,7 @@
 
 Un centro di controllo nativo per Windows: dispositivi, audio, profili e shortcut, con un overlay discreto.
 
-**0.3.2 è una prerelease.** L'elenco riguarda le periferiche d'interfaccia: audio, monitor, tastiere, mouse, videocamere, stampanti, scanner e hub USB esterni. Non include CPU, bus, controller host o altri nodi interni. La copertura dei controlli è descritta nella [matrice delle capacità](docs/CAPABILITIES.md).
+**0.3.3 è una prerelease.** L'elenco riguarda le periferiche d'interfaccia: audio, monitor, tastiere, mouse, videocamere, stampanti, scanner e hub USB esterni. Non include CPU, bus, controller host o altri nodi interni. La copertura dei controlli è descritta nella [matrice delle capacità](docs/CAPABILITIES.md).
 
 ## Download
 
@@ -23,7 +23,7 @@ I binari non sono ancora firmati con un certificato Authenticode. Gli hash perme
 - Cercare e filtrare le periferiche d'interfaccia. Ogni tipo ha un'icona vettoriale; gli endpoint monitor duplicati e le interfacce input dello stesso contenitore vengono raggruppati.
 - Conservare i dispositivi scollegati, le preferenze dell'overlay e le impostazioni supportate.
 - Regolare volume, mute, canali e livello in dB di cuffie, altoparlanti e microfoni esposti da Core Audio.
-- Attivare, disattivare e regolare l'eco microfono/sidetone nelle cuffie quando il driver lo espone nella topologia audio Windows.
+- Attivare, disattivare e regolare l'eco microfono/sidetone nelle cuffie quando il driver lo espone nella topologia audio Windows. Se il nodo mute del driver non è scrivibile, Hub usa il volume minimo e ricorda il livello da ripristinare.
 - Regolare velocità puntatore, doppio clic, rotella, pulsante principale e ripetizione tastiera. Queste preferenze Windows sono globali, non per singolo mouse o tastiera.
 - Regolare luminosità e contrasto dei monitor che rispondono alle API DDC/CI.
 - Regolare i controlli standard delle webcam esposti da IAMCameraControl/IAMVideoProcAmp, senza acquisire video. I valori disponibili dipendono dal driver.
@@ -60,7 +60,7 @@ Su Windows con SDK .NET 8:
 dotnet build src/HubTool/HubTool.csproj -c Release
 dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release
 dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release -- --hardware-read
-./scripts/package.ps1 -Version 0.3.2
+./scripts/package.ps1 -Version 0.3.3
 ```
 
 I test ordinari verificano persistenza, merge dell'inventario, riconnessione e profili offline senza cambiare hardware. `--hardware-read` aggiunge letture reali di input, audio e monitor. [Verifica e limiti](docs/VERIFICATION.md).

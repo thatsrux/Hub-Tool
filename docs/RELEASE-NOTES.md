@@ -1,6 +1,6 @@
-Hub Tool 0.3.2: controllo dell'eco microfono direttamente nella scheda delle cuffie.
+Hub Tool 0.3.3: interruttore dell'eco microfono compatibile con i driver che ignorano il nodo mute.
 
-- Attivazione, disattivazione e volume dell'eco microfono/sidetone esposto dal driver audio Windows.
+- Attivazione, disattivazione e volume dell'eco microfono/sidetone esposto dal driver audio Windows, con fallback sul volume per il dispositivo Fifine.
 - Sezione dedicata nell'uscita cuffie, disponibile anche per profili, shortcut, overlay e ripristino.
 - `HubTool.exe` resta disponibile direttamente nella cartella principale e non richiede un'installazione separata di .NET.
 

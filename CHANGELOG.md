@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3 — 2026-09-15
+
+- Corretto l'interruttore eco microfono sui driver, incluso Fifine, che espongono un nodo mute ma ignorano la scrittura.
+- Aggiunto un fallback che disattiva il sidetone tramite il livello minimo e ripristina il volume precedente alla riattivazione.
+- Conservati stato disattivato e volume precedente tra riavvio, profili e riconnessioni.
+
 ## 0.3.2 — 2026-09-15
 
 - Aggiunti volume e interruttore dell'eco microfono/sidetone nella scheda dell'uscita audio associata.
