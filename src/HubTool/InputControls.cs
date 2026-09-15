@@ -29,7 +29,7 @@ public static class InputControls
     [
         new Device
         {
-            Id = MouseId, Name = "Mouse · preferenze Windows", Kind = "Mouse", Connected = true,
+            Id = MouseId, Name = "Mouse", Kind = "Mouse", Connected = true,
             Controls =
             [
                 new("speed", "Velocità del puntatore", 1, 20, 1),
@@ -42,7 +42,7 @@ public static class InputControls
         },
         new Device
         {
-            Id = KeyboardId, Name = "Tastiera · preferenze Windows", Kind = "Keyboard", Connected = true,
+            Id = KeyboardId, Name = "Tastiera", Kind = "Keyboard", Connected = true,
             Controls =
             [
                 new("repeat-speed", "Velocità ripetizione", 0, 31, 1),

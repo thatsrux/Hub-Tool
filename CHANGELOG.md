@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.5 — 2026-09-15
+
+- Rimossi dall'inventario i nodi Tastiera HID, HID-compliant mouse e le altre interfacce input generiche; restano una sola voce Mouse e Tastiera con i controlli Windows.
+- Escluse webcam virtuali come OBS Virtual Camera e code software come OneNote, Microsoft Print to PDF, XPS e Fax.
+- Deduplicate le interfacce scanner dello stesso dispositivo multifunzione, mantenendo la stampante hardware effettiva.
+
 ## 0.3.4 — 2026-09-15
 
 - Aggiunto il pulsante per ripristinare tutti i controlli supportati della videocamera ai valori predefiniti dichiarati dal driver.

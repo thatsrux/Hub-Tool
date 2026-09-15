@@ -17,6 +17,15 @@ Check(PeripheralCatalog.IsNativePeripheral("USB", "USB\\VID_1234&PID_5678", "Gen
 Check(PeripheralCatalog.Icon(new Device { Kind = "Uscita audio", AudioFormFactor = 3 }) == "headphones"
     && PeripheralCatalog.Icon(new Device { Kind = "Microfono" }) == "microphone"
     && PeripheralCatalog.Icon(new Device { Kind = "Keyboard" }) == "keyboard", "Headphones, microphone and keyboard get distinct icons");
+Check(!PeripheralCatalog.IsPeripheral(new Device { Id = "input:Keyboard:generic", Name = "Tastiera HID", Kind = "Keyboard" })
+    && !PeripheralCatalog.IsPeripheral(new Device { Id = "ROOT\\MOUSE\\0000", Name = "HID-compliant mouse", Kind = "Mouse" })
+    && PeripheralCatalog.IsPeripheral(new Device { Id = InputControls.KeyboardId, Name = "Tastiera", Kind = "Keyboard" }),
+    "Generic HID interfaces are replaced by canonical Windows input devices");
+Check(!PeripheralCatalog.IsPeripheral(new Device { Id = "camera:@device:sw:{category}\\{obs}", Name = "OBS Virtual Camera", Kind = "Camera" })
+    && !PeripheralCatalog.IsPeripheral(new Device { Id = "SWD\\PRINTENUM\\PDF", Name = "Microsoft Print to PDF", Kind = "PrintQueue" })
+    && !PeripheralCatalog.IsPeripheral(new Device { Id = "SWD\\PRINTENUM\\ONENOTE", Name = "OneNote (Desktop) - Protetto", Kind = "PrintQueue" })
+    && PeripheralCatalog.IsPeripheral(new Device { Id = "SWD\\PRINTENUM\\BROTHER", Name = "Brother DCP-L2620DW Printer", Kind = "PrintQueue" }),
+    "Virtual cameras and software print queues are excluded while physical printers remain");
 Check(Math.Abs(AudioTopologyControls.LevelToPercent(12, 0, 16) - 75) < .001
     && Math.Abs(AudioTopologyControls.PercentToLevel(63, 0, 16) - 10.08) < .001
     && AudioTopologyControls.IsSidetone("sidetone:enabled:12"), "Sidetone values map safely between driver levels and UI percent");
@@ -38,8 +47,16 @@ var grouped = PeripheralCatalog.Prepare([
     new Device { Id = "DISPLAY\\ABC\\123", Kind = "Monitor", Name = "Monitor" },
     new Device { Id = "monitor:\\\\?\\DISPLAY#ABC#123#{guid}", Kind = "Monitor", Name = "Monitor" }
 ]);
-Check(grouped.Count(PeripheralCatalog.IsVisible) == 2 && grouped.Single(d => d.Id.StartsWith("input:")).Controls.Count == 1,
-    "Input interfaces are grouped and PnP monitor duplicates are removed");
+Check(grouped.Count(PeripheralCatalog.IsVisible) == 2 && grouped.Single(d => d.Id == InputControls.KeyboardId).Controls.Count == 1,
+    "Generic input interfaces and PnP monitor duplicates are removed");
+var printerDevices = PeripheralCatalog.Prepare([
+    new Device { Id = "SWD\\PRINTENUM\\BROTHER", Name = "Brother Printer", Kind = "PrintQueue", ContainerId = "printer-one" },
+    new Device { Id = "SWD\\ESCL\\BROTHER", Name = "Brother Scanner", Kind = "Image", ContainerId = "printer-one" },
+    new Device { Id = "SWD\\DAFWSDPROVIDER\\BROTHER", Name = "Brother Scanner [network]", ProductName = "Brother Scanner", Kind = "Image", ContainerId = "printer-one" },
+    new Device { Id = "SWD\\PRINTENUM\\PDF", Name = "Microsoft Print to PDF", Kind = "PrintQueue" }
+]);
+Check(printerDevices.Count == 2 && printerDevices.Count(d => d.Kind == "Image") == 1 && printerDevices.Any(d => d.Kind == "PrintQueue"),
+    "Physical multifunction printer is retained with one scanner interface");
 var audio = new Device { Id = "audio:one", Name = "Headset", Connected = true, Volume = .3f, Overlay = true, Restore = true,
     Values = new() { ["channel:0"] = 30 }, Controls = [new("channel:0", "Channel", 0, 100, 1)] };
 var devices = new List<Device> { audio };

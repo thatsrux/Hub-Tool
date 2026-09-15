@@ -13,7 +13,14 @@ public sealed class DeviceService : IDisposable
     public DeviceService(Settings settings)
     {
         State = settings;
-        State.Devices.RemoveAll(d => !PeripheralCatalog.IsPeripheral(d));
+        var removed = State.Devices.Where(d => !PeripheralCatalog.IsPeripheral(d)).Select(d => d.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        State.Devices.RemoveAll(d => removed.Contains(d.Id));
+        foreach (var profile in State.Profiles)
+        {
+            foreach (var id in profile.Audio.Keys.Where(removed.Contains).ToArray()) profile.Audio.Remove(id);
+            foreach (var id in profile.Controls.Keys.Where(removed.Contains).ToArray()) profile.Controls.Remove(id);
+        }
+        State.Shortcuts.RemoveAll(s => s.DeviceId.Length > 0 && removed.Contains(s.DeviceId));
         foreach (var device in State.Devices) device.Connected = false;
     }
 
