@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4 — 2026-09-15
+
+- Aggiunto il pulsante per ripristinare tutti i controlli supportati della videocamera ai valori predefiniti dichiarati dal driver.
+- Il reset continua sugli altri parametri se il driver rifiuta una singola proprietà e mostra un riepilogo dell'esito.
+- Dopo il reset, slider e modalità automatiche vengono riletti direttamente dalla videocamera.
+
 ## 0.3.3 — 2026-09-15
 
 - Corretto l'interruttore eco microfono sui driver, incluso Fifine, che espongono un nodo mute ma ignorano la scrittura.

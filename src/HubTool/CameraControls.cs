@@ -6,6 +6,7 @@ namespace HubTool;
 /// <summary>Queries standard DirectShow camera properties without creating a capture graph.</summary>
 public static class CameraControls
 {
+    public sealed record ResetResult(Dictionary<string, double> Values, int Applied, List<string> Errors);
     [ComImport, Guid("29840822-5B84-11D0-BD3B-00A0C911CE86"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface ICreateDevEnum
     {
@@ -104,6 +105,28 @@ public static class CameraControls
         }
     }
 
+    public static int PreferredDefaultFlags(int caps) => (caps & 1) != 0 ? 1 : 2;
+
+    private static int ResetProperties(string[] labels, RangeGetter range, ValueSetter write, List<string> errors)
+    {
+        int applied = 0;
+        for (int property = 0; property < labels.Length; property++)
+        {
+            int hr = range(property, out int min, out int max, out int step, out int defaultValue, out int caps);
+            if (hr < 0 || max < min || step <= 0) continue;
+            int flags = PreferredDefaultFlags(caps);
+            if ((caps & flags) == 0)
+            {
+                errors.Add(labels[property] + ": modalità predefinita non esposta");
+                continue;
+            }
+            hr = write(property, Math.Clamp(defaultValue, min, max), flags);
+            if (hr < 0) errors.Add(labels[property] + $": errore 0x{hr:X8}");
+            else applied++;
+        }
+        return applied;
+    }
+
     public static List<Device> Enumerate()
     {
         var result = new List<Device>();
@@ -158,5 +181,30 @@ public static class CameraControls
             finally { Marshal.ReleaseComObject(filter); }
         });
         return actual ?? throw new InvalidOperationException("Webcam non più disponibile");
+    }
+
+    public static ResetResult Reset(string id)
+    {
+        ResetResult? result = null;
+        Visit((foundId, name, moniker) =>
+        {
+            if (!StringComparer.OrdinalIgnoreCase.Equals(id, foundId)) return;
+            object filter = Bind(moniker);
+            try
+            {
+                var errors = new List<string>();
+                int applied = 0;
+                if (filter is IAMCameraControl camera)
+                    applied += ResetProperties(CameraNames, camera.GetRange, camera.Set, errors);
+                if (filter is IAMVideoProcAmp video)
+                    applied += ResetProperties(VideoNames, video.GetRange, video.Set, errors);
+                var device = new Device();
+                if (filter is IAMCameraControl c) ReadProperties(device, "camera:", CameraNames, c.GetRange, c.Get);
+                if (filter is IAMVideoProcAmp v) ReadProperties(device, "video:", VideoNames, v.GetRange, v.Get);
+                result = new(device.Values, applied, errors);
+            }
+            finally { Marshal.ReleaseComObject(filter); }
+        });
+        return result ?? throw new InvalidOperationException("Webcam non più disponibile");
     }
 }

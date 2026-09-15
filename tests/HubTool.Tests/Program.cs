@@ -29,6 +29,8 @@ var fallbackDisplay = new Device
 AudioTopologyControls.RestoreDisplayState(fallbackDisplay);
 Check(fallbackDisplay.Values["sidetone:volume:10:0"] == 64 && fallbackDisplay.Values["sidetone:enabled:11"] == 0,
     "Sidetone fallback preserves volume while showing the disabled state");
+Check(CameraControls.PreferredDefaultFlags(3) == 1 && CameraControls.PreferredDefaultFlags(2) == 2,
+    "Camera reset prefers automatic mode and falls back to manual mode");
 var grouped = PeripheralCatalog.Prepare([
     new Device { Id = "HID\\ONE", Kind = "Keyboard", Name = "Keyboard", ContainerId = "same" },
     new Device { Id = "HID\\TWO", Kind = "Keyboard", Name = "Keyboard", ContainerId = "same" },

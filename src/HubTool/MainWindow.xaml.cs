@@ -178,6 +178,19 @@ public partial class MainWindow : Window
             Foreground = (Brush)FindResource("Muted"), TextWrapping = TextWrapping.Wrap });
         Grid.SetColumn(titles, 1); header.Children.Add(titles); panel.Children.Add(header);
         if (device.Error.Length > 0) panel.Children.Add(Text(device.Error, 12));
+        if (!compact && device.Id.StartsWith("camera:", StringComparison.Ordinal) && device.Controls.Count > 0)
+        {
+            var resetCamera = new Button { Content = "Ripristina impostazioni predefinite", HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 0, 0, 12) };
+            resetCamera.Click += async (_, _) => await RunAsync(async () =>
+            {
+                var result = await service.ResetCameraAsync(device);
+                Status.Text = result.Errors.Count == 0
+                    ? $"Videocamera ripristinata · {result.Applied} impostazioni"
+                    : $"Ripristinate {result.Applied} impostazioni · " + string.Join("; ", result.Errors);
+            });
+            panel.Children.Add(resetCamera);
+        }
         if (device.Volume.HasValue)
         {
             AddSlider(panel, "Volume", 0, 100, 1, device.Volume.Value * 100, "%", async value =>

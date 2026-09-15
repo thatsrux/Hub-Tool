@@ -181,6 +181,23 @@ public sealed class DeviceService : IDisposable
         finally { State.Save(); }
     }
 
+    public async Task<CameraControls.ResetResult> ResetCameraAsync(Device device)
+    {
+        if (!device.Connected || !device.Id.StartsWith("camera:", StringComparison.Ordinal))
+            throw new InvalidOperationException("Videocamera non collegata");
+        var result = await Task.Run(() => CameraControls.Reset(device.Id));
+        device.Values = result.Values;
+        device.NotifyValues();
+        if (device.Pending != null)
+        {
+            foreach (var key in device.Pending.Controls.Keys.Where(k => k.StartsWith("camera:") || k.StartsWith("video:")).ToArray())
+                device.Pending.Controls.Remove(key);
+            if (device.Pending.Audio == null && device.Pending.Controls.Count == 0) device.Pending = null;
+        }
+        State.Save();
+        return result;
+    }
+
     private async Task WriteControlAsync(Device device, string key, double value)
     {
         var control = device.Controls.FirstOrDefault(c => c.Id == key) ?? throw new NotSupportedException("Controllo non esposto: " + key);

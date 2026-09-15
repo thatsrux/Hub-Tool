@@ -40,8 +40,9 @@ internal static class PreviewCapture
                 tabs.SelectedIndex = i;
                 if (i == 0 && window.FindName("DeviceList") is ListBox devices)
                 {
-                    var sidetone = devices.Items.Cast<Device>().FirstOrDefault(d => d.Controls.Any(c => AudioTopologyControls.IsSidetone(c.Id)));
-                    if (sidetone != null) devices.SelectedItem = sidetone;
+                    var diagnostic = devices.Items.Cast<Device>().FirstOrDefault(d => d.Id.StartsWith("camera:") && d.Controls.Count > 0)
+                        ?? devices.Items.Cast<Device>().FirstOrDefault(d => d.Controls.Any(c => AudioTopologyControls.IsSidetone(c.Id)));
+                    if (diagnostic != null) devices.SelectedItem = diagnostic;
                 }
                 await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
                 Capture(window, "page-" + i);
