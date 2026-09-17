@@ -1,4 +1,5 @@
 using HubTool;
+using NAudio.CoreAudioApi;
 using System.Text.Json;
 
 int passed = 0;
@@ -62,6 +63,31 @@ Check(AudioTopologyControls.RequiresVolumeFallback("Altoparlanti (fifine Microph
     && !AudioTopologyControls.RequiresVolumeFallback("Altoparlanti Realtek"), "Fifine sidetone bypasses its ineffective mute node");
 Check(StartupManager.BuildCommand(@"C:\Program Files\Hub Tool\HubTool.exe") == "\"C:\\Program Files\\Hub Tool\\HubTool.exe\" --startup",
     "Windows startup command quotes the executable and uses silent startup mode");
+var audioMigration = new Settings
+{
+    Devices = [new Device { Id = "audio:old", Name = "Headset", Kind = "Uscita audio", AudioFormFactor = 1 }],
+    Shortcuts = [new Shortcut { DeviceId = "audio:old", Action = "toggle-control", Control = "sidetone:enabled:1" }]
+};
+DeviceService.ReconcileAudioEndpointIds(audioMigration,
+    [
+        new Device { Id = "audio:new", Name = "Headset", Kind = "Uscita audio", AudioFormFactor = 1, PhysicalId = "USB\\VID_1234" },
+        new Device { Id = "audio:mic", Name = "Microphone", Kind = "Microfono", AudioFormFactor = 4, PhysicalId = "USB\\VID_1234" }
+    ]);
+Check(audioMigration.Devices.Single().Id == "audio:new" && audioMigration.Shortcuts.Single().DeviceId == "audio:new",
+    "Audio endpoint ID changes preserve device settings and shortcuts");
+var duplicateAudio = new Settings
+{
+    Devices =
+    [
+        new Device { Id = "audio:stale", Name = "Headset", Kind = "Uscita audio", AudioFormFactor = 1 },
+        new Device { Id = "audio:active", Name = "Headset", Kind = "Uscita audio", AudioFormFactor = 1 }
+    ],
+    Shortcuts = [new Shortcut { DeviceId = "audio:stale", Action = "toggle-control", Control = "sidetone:enabled:1" }]
+};
+DeviceService.ReconcileAudioEndpointIds(duplicateAudio,
+    [new Device { Id = "audio:active", Name = "Headset", Kind = "Uscita audio", AudioFormFactor = 1, PhysicalId = "USB\\VID_1234" }]);
+Check(duplicateAudio.Devices.Count == 1 && duplicateAudio.Shortcuts.Single().DeviceId == "audio:active",
+    "Stale audio duplicates no longer leave shortcuts bound to a disconnected endpoint");
 Check(CameraControls.PreferredDefaultFlags(3) == 1 && CameraControls.PreferredDefaultFlags(2) == 2,
     "Camera reset prefers automatic mode and falls back to manual mode");
 Check(MainWindow.SnapSliderValue(7.6, -10, 10, 3) == 8 && MainWindow.SnapSliderValue(99.9, 0, 90, 5) == 90,
@@ -174,14 +200,21 @@ if (args.Contains("--hardware-read"))
         if (args.Contains("--sidetone-toggle"))
         {
             var enabled = sidetoneControls.Single(c => c.Id.StartsWith("sidetone:enabled:", StringComparison.Ordinal));
+            var volume = sidetoneControls.Single(c => c.Id.StartsWith("sidetone:volume:", StringComparison.Ordinal));
+            using var audioEnumerator = new MMDeviceEnumerator();
+            using var endpoint = audioEnumerator.GetDevice(fifineOutput.Id[6..]);
+            var originalRawVolume = AudioTopologyControls.ReadRawVolumeForDiagnostics(endpoint, volume.Id);
+            var testVolume = originalRawVolume > 1 ? originalRawVolume : 60;
+            await live.SetControlAsync(fifineOutput, volume.Id, testVolume);
             var original = fifineOutput.Values[enabled.Id];
-            await live.SetControlAsync(fifineOutput, enabled.Id, original == 0 ? 1 : 0);
-            Check(fifineOutput.Values[enabled.Id] != original, "Sidetone toggle changes the effective hardware state");
-            if (original != 0) Check(AudioTopologyControls.IsFallbackActiveForDiagnostics(fifineOutput),
-                "Fifine sidetone disable uses the hardware volume fallback");
-            await live.SetControlAsync(fifineOutput, enabled.Id, original);
-            Check(fifineOutput.Values[enabled.Id] == original, "Sidetone toggle restores its initial hardware state");
-            if (original != 0) Check(!AudioTopologyControls.IsFallbackActiveForDiagnostics(fifineOutput),
+            await live.SetControlAsync(fifineOutput, enabled.Id, 0);
+            Check(AudioTopologyControls.ReadRawVolumeForDiagnostics(endpoint, volume.Id) <= 1,
+                "Fifine sidetone disable changes the physical Windows value");
+            await live.SetControlAsync(fifineOutput, enabled.Id, 1);
+            Check(Math.Abs(AudioTopologyControls.ReadRawVolumeForDiagnostics(endpoint, volume.Id) - testVolume) <= 2,
+                "Fifine sidetone enable restores the physical Windows value");
+            await live.SetControlAsync(fifineOutput, volume.Id, originalRawVolume);
+            Check(!AudioTopologyControls.IsFallbackActiveForDiagnostics(fifineOutput),
                 "Fifine sidetone restore clears the volume fallback");
         }
     }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 — 2026-09-17
+
+- Corretto il collegamento di checkbox e shortcut dell’eco microfono quando Windows rigenera l’ID dell’endpoint audio.
+- Hub ora riconcilia gli endpoint equivalenti, trasferisce le shortcut e rimuove la vecchia copia scollegata.
+- La verifica Fifine controlla il valore fisico Windows: disattivazione a zero e ripristino del livello precedente.
+
 ## 0.6.0 — 2026-09-17
 
 - Aggiunto l’avvio con Windows tramite una sola voce utente: Hub parte nascosto nell’area notifiche e attende 12 secondi prima della scansione dei dispositivi.

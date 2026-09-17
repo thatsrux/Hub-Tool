@@ -58,6 +58,8 @@ public sealed class DeviceService : IDisposable
                     };
                     try { device.AudioFormFactor = Convert.ToInt32(endpoint.Properties[PropertyKeys.PKEY_AudioEndpoint_FormFactor].Value); }
                     catch (Exception) { device.AudioFormFactor = -1; }
+                    try { device.PhysicalId = endpoint.Properties[PropertyKeys.PKEY_Device_ControllerDeviceId].Value?.ToString() ?? ""; }
+                    catch (Exception) { }
                     var range = audio.VolumeRange;
                     if (range.MaxDecibels > range.MinDecibels)
                     {
@@ -78,6 +80,7 @@ public sealed class DeviceService : IDisposable
         }
         var blocked = State.HiddenDeviceIds.Concat(State.RemovedDeviceIds).ToHashSet(StringComparer.OrdinalIgnoreCase);
         found = PeripheralCatalog.Prepare(found).Where(d => !blocked.Contains(d.Id) && (d.PhysicalId.Length == 0 || !blocked.Contains(d.PhysicalId))).ToList();
+        ReconcileAudioEndpointIds(State, found);
         foreach (var current in found.Where(d => d.PhysicalId.Length > 0))
         {
             var old = State.Devices.FirstOrDefault(d => d.Id.Equals(current.PhysicalId, StringComparison.OrdinalIgnoreCase));
@@ -97,6 +100,35 @@ public sealed class DeviceService : IDisposable
         }
         State.Save();
         UpdateAudioSubscriptions();
+    }
+
+    internal static void ReconcileAudioEndpointIds(Settings state, List<Device> found)
+    {
+        var audio = found.Where(d => d.Id.StartsWith("audio:", StringComparison.Ordinal)).ToList();
+        foreach (var current in audio)
+        {
+            List<Device> samePhysical = current.PhysicalId.Length == 0 ? [] : state.Devices.Where(d =>
+                d.Id.StartsWith("audio:", StringComparison.Ordinal) && !d.Id.Equals(current.Id, StringComparison.OrdinalIgnoreCase)
+                && d.Kind == current.Kind && d.PhysicalId.Equals(current.PhysicalId, StringComparison.OrdinalIgnoreCase)).ToList();
+            var legacy = samePhysical.Count > 0 ? samePhysical : state.Devices.Where(d =>
+                d.Id.StartsWith("audio:", StringComparison.Ordinal) && !d.Id.Equals(current.Id, StringComparison.OrdinalIgnoreCase)
+                && d.Name.Equals(current.Name, StringComparison.OrdinalIgnoreCase) && d.Kind == current.Kind
+                && d.AudioFormFactor == current.AudioFormFactor).ToList();
+            if (legacy.Count != 1 || audio.Count(d => d.Name.Equals(current.Name, StringComparison.OrdinalIgnoreCase)
+                && d.Kind == current.Kind && d.AudioFormFactor == current.AudioFormFactor) != 1) continue;
+
+            var old = legacy[0];
+            var oldId = old.Id;
+            var existing = state.Devices.FirstOrDefault(d => d.Id.Equals(current.Id, StringComparison.OrdinalIgnoreCase));
+            if (existing == null) old.Id = current.Id;
+            else
+            {
+                existing.Overlay |= old.Overlay;
+                state.Devices.Remove(old);
+            }
+            foreach (var shortcut in state.Shortcuts.Where(s => s.DeviceId.Equals(oldId, StringComparison.OrdinalIgnoreCase)))
+                shortcut.DeviceId = current.Id;
+        }
     }
 
     public void ForgetDevice(Device device)

@@ -86,7 +86,7 @@ public static class AudioTopologyControls
                 }
                 else if (!IsFallbackActive(device))
                 {
-                    try { mute.IsMuted = false; } catch { }
+                    try { mute.IsMuted = true; } catch { }
                     DisableWithVolumeFallback(endpoint, device);
                 }
                 device.Values[key] = enable ? 1 : 0;
@@ -138,6 +138,16 @@ public static class AudioTopologyControls
 
     internal static bool RequiresVolumeFallback(string endpointName) => endpointName.Contains("fifine", StringComparison.OrdinalIgnoreCase);
     internal static bool IsFallbackActiveForDiagnostics(Device device) => IsFallbackActive(device);
+
+    internal static double ReadRawVolumeForDiagnostics(MMDevice endpoint, string key)
+    {
+        if (!TryParse(key, out var kind, out uint partId, out uint channel) || kind != "volume")
+            throw new ArgumentException("Controllo volume sidetone non valido", nameof(key));
+        var volume = FindPart(endpoint, partId)?.AudioVolumeLevel
+            ?? throw new NotSupportedException("Volume sidetone non disponibile");
+        volume.GetLevelRange(channel, out float min, out float max, out _);
+        return LevelToPercent(volume.GetLevel(channel), min, max);
+    }
 
     private static void DisableWithVolumeFallback(MMDevice endpoint, Device device)
     {
