@@ -6,7 +6,7 @@ Richiesta corrente: migliorare nettamente app e overlay, usare una barra inizial
 
 - Build e 23 controlli locali passati, inclusi due controlli di lettura hardware.
 - Filtro: CPU, bus, host controller USB, root hub e code radice esclusi; hub USB esterni ammessi. Raggruppamento input e deduplicazione monitor verificati.
-- Sul PC di verifica: 19 periferiche visibili, 4 endpoint audio e 2 monitor con controlli. Due record globali input restano interni al motore dei profili e non compaiono nella UI.
+- Sul PC di verifica: 19 periferiche visibili, 4 endpoint audio e 2 monitor con controlli. I record tecnici duplicati vengono filtrati prima di costruire la UI.
 - Icone vettoriali per audio/cuffie, microfoni, tastiere, mouse, monitor, webcam, hub USB, stampanti/scanner e storage. Nessun pacchetto di icone, font o immagine aggiuntivo.
 - Verifica visuale tramite rendering delle cinque pagine, layout minimo 900 × 620, scheda videocamera, barra overlay e pannello dispositivo. Verifica della finestra nativa: WS_CAPTION assente.
 - Apertura ed Escape esercitati sui gestori WPF reali; ancoraggio preservato. Verificate sia la barra orizzontale sia quella verticale, con tre dispositivi e il pulsante Hub.

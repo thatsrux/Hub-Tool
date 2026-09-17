@@ -1,4 +1,4 @@
-# Copertura effettiva — 0.5.4
+# Copertura effettiva — 0.6.0
 
 | Categoria | Rilevamento | Controlli diretti | Limiti |
 |---|---|---|---|
@@ -17,7 +17,7 @@
 
 ## Persistenza
 
-Gli ID vengono confrontati senza distinzione maiuscole/minuscole. La disconnessione conserva il record. Un dispositivo dimenticato resta escluso finché l’utente non ripristina l’elenco; i riferimenti in profili e shortcut vengono eliminati. Il ripristino è esplicito; i profili includono audio e tutti i controlli implementati. I profili immagine sono legati al record persistente della singola camera. Un errore di un driver viene segnalato; non viene presentato come successo completo.
+Gli ID vengono confrontati senza distinzione maiuscole/minuscole. La disconnessione conserva il record. Un dispositivo dimenticato resta escluso finché l’utente non ripristina l’elenco; una rimozione definitiva blocca stabilmente sia l’ID logico sia quello fisico e cancella le relative shortcut. I profili immagine restano legati al record persistente della singola camera. Un errore di un driver viene segnalato; non viene presentato come successo completo.
 
 ## Estensione
 

@@ -77,6 +77,21 @@ public static class AudioTopologyControls
         if (kind == "enabled" && part.AudioMute is { } mute)
         {
             bool enable = value >= .5;
+            if (RequiresVolumeFallback(endpoint.FriendlyName))
+            {
+                if (enable)
+                {
+                    RestoreFallbackVolume(endpoint, device);
+                    try { mute.IsMuted = false; } catch { }
+                }
+                else if (!IsFallbackActive(device))
+                {
+                    try { mute.IsMuted = false; } catch { }
+                    DisableWithVolumeFallback(endpoint, device);
+                }
+                device.Values[key] = enable ? 1 : 0;
+                return;
+            }
             if (IsFallbackActive(device))
             {
                 if (enable) RestoreFallbackVolume(endpoint, device);
@@ -120,6 +135,9 @@ public static class AudioTopologyControls
     }
 
     private static bool IsFallbackActive(Device device) => device.ControlMemory.TryGetValue(FallbackActive, out var active) && active != 0;
+
+    internal static bool RequiresVolumeFallback(string endpointName) => endpointName.Contains("fifine", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsFallbackActiveForDiagnostics(Device device) => IsFallbackActive(device);
 
     private static void DisableWithVolumeFallback(MMDevice endpoint, Device device)
     {

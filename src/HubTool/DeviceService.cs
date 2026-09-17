@@ -18,12 +18,8 @@ public sealed class DeviceService : IDisposable
         this.controlLights = controlLights;
         var removed = State.Devices.Where(d => !PeripheralCatalog.IsPeripheral(d)).Select(d => d.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         State.Devices.RemoveAll(d => removed.Contains(d.Id));
-        foreach (var profile in State.Profiles)
-        {
-            foreach (var id in profile.Audio.Keys.Where(removed.Contains).ToArray()) profile.Audio.Remove(id);
-            foreach (var id in profile.Controls.Keys.Where(removed.Contains).ToArray()) profile.Controls.Remove(id);
-        }
         State.Shortcuts.RemoveAll(s => s.DeviceId.Length > 0 && removed.Contains(s.DeviceId));
+        State.Shortcuts.RemoveAll(s => s.Action.StartsWith("profile:", StringComparison.Ordinal));
         foreach (var device in State.Devices) device.Connected = false;
     }
 
@@ -80,8 +76,8 @@ public sealed class DeviceService : IDisposable
                 catch (Exception ex) { Errors.Add(endpoint.ID + ": " + ex.Message); }
             }
         }
-        var hidden = State.HiddenDeviceIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        found = PeripheralCatalog.Prepare(found).Where(d => !hidden.Contains(d.Id) && (d.PhysicalId.Length == 0 || !hidden.Contains(d.PhysicalId))).ToList();
+        var blocked = State.HiddenDeviceIds.Concat(State.RemovedDeviceIds).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        found = PeripheralCatalog.Prepare(found).Where(d => !blocked.Contains(d.Id) && (d.PhysicalId.Length == 0 || !blocked.Contains(d.PhysicalId))).ToList();
         foreach (var current in found.Where(d => d.PhysicalId.Length > 0))
         {
             var old = State.Devices.FirstOrDefault(d => d.Id.Equals(current.PhysicalId, StringComparison.OrdinalIgnoreCase));
@@ -89,11 +85,6 @@ public sealed class DeviceService : IDisposable
             var existing = State.Devices.FirstOrDefault(d => d.Id.Equals(current.Id, StringComparison.OrdinalIgnoreCase));
             if (existing == null) old.Id = current.Id;
             else { existing.Overlay |= old.Overlay; State.Devices.Remove(old); }
-            foreach (var profile in State.Profiles)
-            {
-                if (profile.Controls.Remove(current.PhysicalId, out var controls)) profile.Controls.TryAdd(current.Id, controls);
-                if (profile.Audio.Remove(current.PhysicalId, out var audio)) profile.Audio.TryAdd(current.Id, audio);
-            }
             foreach (var shortcut in State.Shortcuts.Where(s => s.DeviceId == current.PhysicalId)) shortcut.DeviceId = current.Id;
         }
         var restore = DeviceInventory.Merge(State.Devices, found);
@@ -113,10 +104,6 @@ public sealed class DeviceService : IDisposable
         if (!State.HiddenDeviceIds.Contains(device.Id, StringComparer.OrdinalIgnoreCase)) State.HiddenDeviceIds.Add(device.Id);
         if (device.PhysicalId.Length > 0 && !State.HiddenDeviceIds.Contains(device.PhysicalId, StringComparer.OrdinalIgnoreCase)) State.HiddenDeviceIds.Add(device.PhysicalId);
         State.Devices.RemoveAll(d => d.Id.Equals(device.Id, StringComparison.OrdinalIgnoreCase));
-        foreach (var profile in State.Profiles)
-        {
-            profile.Audio.Remove(device.Id); profile.Controls.Remove(device.Id);
-        }
         State.Shortcuts.RemoveAll(s => s.DeviceId.Equals(device.Id, StringComparison.OrdinalIgnoreCase));
         if (device.Id == LightControls.DeviceId && controlLights) lights.Attach(null);
         State.Save(); UpdateAudioSubscriptions();
@@ -126,6 +113,19 @@ public sealed class DeviceService : IDisposable
     {
         State.HiddenDeviceIds.Clear();
         State.Save();
+    }
+
+    public void RemoveDevicePermanently(Device device)
+    {
+        foreach (var id in new[] { device.Id, device.PhysicalId }.Where(id => !string.IsNullOrWhiteSpace(id)))
+        {
+            State.HiddenDeviceIds.RemoveAll(saved => saved.Equals(id, StringComparison.OrdinalIgnoreCase));
+            if (!State.RemovedDeviceIds.Contains(id, StringComparer.OrdinalIgnoreCase)) State.RemovedDeviceIds.Add(id);
+        }
+        State.Devices.RemoveAll(d => d.Id.Equals(device.Id, StringComparison.OrdinalIgnoreCase));
+        State.Shortcuts.RemoveAll(s => s.DeviceId.Equals(device.Id, StringComparison.OrdinalIgnoreCase));
+        if (device.Id == LightControls.DeviceId && controlLights) lights.Attach(null);
+        State.Save(); UpdateAudioSubscriptions();
     }
 
     private void UpdateAudioSubscriptions()
@@ -271,51 +271,6 @@ public sealed class DeviceService : IDisposable
         }
         device.Values[key] = value;
         device.NotifyValues();
-    }
-
-    public Profile Capture(string name)
-    {
-        var profile = new Profile { Name = name };
-        foreach (var device in State.Devices.Where(PeripheralCatalog.IsVisible))
-        {
-            var request = DeviceRequest.Snapshot(device);
-            if (device.Pending is { } pending)
-            {
-                if (pending.Audio is { } audio) request.Audio = new AudioSetting { Volume = audio.Volume, Muted = audio.Muted };
-                foreach (var (key, value) in pending.Controls) request.Controls[key] = value;
-                if (pending.Controls.ContainsKey("decibels"))
-                    foreach (var key in request.Controls.Keys.Where(k => k.StartsWith("channel:")).ToArray()) request.Controls.Remove(key);
-            }
-            if (request.Audio != null) profile.Audio[device.Id] = request.Audio;
-            if (request.Controls.Count > 0) profile.Controls[device.Id] = request.Controls;
-        }
-        return profile;
-    }
-
-    public async Task<List<string>> ApplyAsync(Profile profile)
-    {
-        var failures = new List<string>();
-        foreach (var id in profile.Audio.Keys.Union(profile.Controls.Keys))
-        {
-            var device = State.Devices.FirstOrDefault(d => StringComparer.OrdinalIgnoreCase.Equals(d.Id, id));
-            if (device == null) { failures.Add("Dispositivo sconosciuto: " + id); continue; }
-            device.Pending = new DeviceRequest
-            {
-                Audio = profile.Audio.TryGetValue(id, out var audio) ? new AudioSetting { Volume = audio.Volume, Muted = audio.Muted } : null,
-                Controls = profile.Controls.TryGetValue(id, out var values) ? new Dictionary<string, double>(values) : new()
-            };
-            device.Restore = true;
-            State.Save();
-            if (!device.Connected)
-            {
-                if (device.Pending.Audio is { } target) { device.Volume = target.Volume; device.Muted = target.Muted; }
-                foreach (var (key, value) in device.Pending.Controls) device.Values[key] = value;
-            }
-            var errors = await FlushAsync(device);
-            failures.AddRange(errors.Select(error => device.Name + ": " + error));
-        }
-        State.Save();
-        return failures;
     }
 
     private Task<List<string>> FlushAsync(Device device) => RequestApplier.ApplyAsync(device,

@@ -10,7 +10,7 @@
     <UniformGrid Columns="3" Margin="0,0,-10,10">
      <Border Style="{StaticResource StatCard}"><StackPanel Orientation="Horizontal"><TextBlock x:Name="ConnectedCount" Text="—" Style="{StaticResource StatValue}"/><TextBlock Text="Collegati" Style="{StaticResource StatLabel}"/></StackPanel></Border>
      <Border Style="{StaticResource StatCard}"><StackPanel Orientation="Horizontal"><TextBlock x:Name="OverlayCount" Text="—" Style="{StaticResource StatValue}"/><TextBlock Text="Nell’overlay" Style="{StaticResource StatLabel}"/></StackPanel></Border>
-     <Border Style="{StaticResource StatCard}"><StackPanel Orientation="Horizontal"><TextBlock x:Name="ProfileCount" Text="—" Style="{StaticResource StatValue}"/><TextBlock Text="Profili salvati" Style="{StaticResource StatLabel}"/></StackPanel></Border>
+     <Border Style="{StaticResource StatCard}"><StackPanel Orientation="Horizontal"><TextBlock x:Name="ShortcutCount" Text="—" Style="{StaticResource StatValue}"/><TextBlock Text="Shortcut" Style="{StaticResource StatLabel}"/></StackPanel></Border>
     </UniformGrid>
     <Grid Grid.Row="1" Margin="0,0,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="160"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <Grid><TextBox x:Name="Search" TextChanged="SearchChanged" AutomationProperties.Name="Cerca periferica" Margin="0,0,10,0" VerticalContentAlignment="Center"/><TextBlock Text="Cerca periferica…" Foreground="{StaticResource Muted}" Margin="12,0" VerticalAlignment="Center" IsHitTestVisible="False"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text.Length, ElementName=Search}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></Grid>
@@ -28,17 +28,6 @@
      </Grid>
      <Border Grid.Column="1" Style="{StaticResource SectionCard}"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="Details"/></ScrollViewer></Border>
     </Grid>
-   </Grid></TabItem>
-   <TabItem Header="Profili"><Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="370"/><ColumnDefinition/></Grid.ColumnDefinitions>
-    <Border Style="{StaticResource SectionCard}" Margin="0,0,14,0"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
-     <TextBlock Text="Nuovo profilo" Style="{StaticResource SectionTitle}"/><TextBlock Text="Salva le impostazioni attuali delle periferiche." Style="{StaticResource Hint}"/>
-     <TextBlock Text="Nome" Margin="0,14,0,0"/><TextBox x:Name="ProfileName" Text="Il mio profilo" AutomationProperties.Name="Nome profilo"/>
-     <Button Content="Salva profilo" Click="SaveProfile" Style="{StaticResource AccentButton}"/>
-     <Separator Margin="0,22" Background="#304155"/>
-     <TextBlock Text="Profili salvati" Style="{StaticResource SectionTitle}"/><ComboBox x:Name="Profiles" SelectionChanged="ProfileSelected" AutomationProperties.Name="Profilo selezionato"/>
-     <Button Content="Applica profilo" Click="ApplyProfile"/><UniformGrid Columns="2"><Button Content="Importa…" Click="ImportProfile"/><Button Content="Esporta…" Click="ExportProfile"/></UniformGrid><Button Content="Elimina selezionato" Click="DeleteProfile"/>
-    </StackPanel></ScrollViewer></Border>
-    <Border Grid.Column="1" Style="{StaticResource SectionCard}"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel><TextBlock Text="Impostazioni incluse" Style="{StaticResource SectionTitle}"/><StackPanel x:Name="ProfileSummary" Margin="0,12,0,0"><TextBlock Text="Seleziona o salva un profilo per vedere le impostazioni." Style="{StaticResource Hint}"/></StackPanel></StackPanel></ScrollViewer></Border>
    </Grid></TabItem>
    <TabItem Header="Shortcut"><Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="440"/><ColumnDefinition/></Grid.ColumnDefinitions>
     <Border Style="{StaticResource SectionCard}" Margin="0,0,14,0"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
@@ -66,12 +55,16 @@
      <StackPanel x:Name="OverlayDeviceChoices"/>
      <Separator Margin="0,18" Background="#304155"/>
      <TextBlock x:Name="ForgottenDeviceCount" Style="{StaticResource Hint}"/><Button x:Name="RestoreForgottenButton" Content="Ripristina dispositivi dimenticati" Click="RestoreForgottenDevices" HorizontalAlignment="Left"/>
+     <TextBlock x:Name="RemovedDeviceCount" Style="{StaticResource Hint}" Margin="4,10,4,0"/>
     </StackPanel></ScrollViewer></Border>
    </Grid></TabItem>
    <TabItem Header="Windows"><Border Style="{StaticResource SectionCard}" Margin="0,14,0,0"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
     <TextBlock Text="Impostazioni Windows" Style="{StaticResource SectionTitle}"/>
     <UniformGrid Columns="2" Margin="0,12,0,0"><Button Content="Mouse e puntatore" Tag="ms-settings:mousetouchpad" Click="OpenSettings"/><Button Content="Tastiera e accessibilità" Tag="ms-settings:easeofaccess-keyboard" Click="OpenSettings"/><Button Content="Bluetooth e dispositivi" Tag="ms-settings:bluetooth" Click="OpenSettings"/><Button Content="Audio e mixer" Tag="ms-settings:apps-volume" Click="OpenSettings"/><Button Content="Schermi" Tag="ms-settings:display" Click="OpenSettings"/><Button Content="Videocamere" Tag="ms-settings:camera" Click="OpenSettings"/><Button Content="Stampanti" Tag="ms-settings:printers" Click="OpenSettings"/><Button Content="Gaming" Tag="ms-settings:gaming-gamebar" Click="OpenSettings"/></UniformGrid>
-    <Separator Margin="0,22" Background="#304155"/><TextBlock Text="Dati e applicazione" Style="{StaticResource SectionTitle}"/><Button Content="Apri cartella impostazioni" Click="OpenData" HorizontalAlignment="Left"/>
+    <Separator Margin="0,22" Background="#304155"/><TextBlock Text="Avvio e applicazione" Style="{StaticResource SectionTitle}"/>
+    <CheckBox x:Name="StartWithWindowsChoice" Content="Avvia Hub Tool con Windows" Click="StartupSettingChanged"/>
+    <TextBlock Text="All’avvio resta nell’area notifiche e attende alcuni secondi prima di rilevare i dispositivi, così non rallenta l’accesso a Windows." Style="{StaticResource Hint}" Margin="4,2,4,10"/>
+    <Button Content="Apri cartella impostazioni" Click="OpenData" HorizontalAlignment="Left"/>
     <TextBlock Text="Chiudendo la finestra, Hub resta nell’area notifiche." Style="{StaticResource Hint}" Margin="4,8"/>
     <Button Content="Esci da Hub" Click="ExitHub" HorizontalAlignment="Left"/>
    </StackPanel></ScrollViewer></Border></TabItem>

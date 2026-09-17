@@ -43,6 +43,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         var version = typeof(MainWindow).Assembly.GetName().Version;
         AppVersion.Text = version == null ? "" : $"{version.Major}.{version.Minor}.{version.Build}";
+        StartWithWindowsChoice.IsChecked = App.PreviewDirectory == null && StartupManager.IsEnabled();
         service = new DeviceService(state);
         service.AudioChanged += id => Dispatcher.BeginInvoke(() =>
         {
@@ -81,6 +82,11 @@ public partial class MainWindow : Window
             if (App.PreviewDirectory == null) RegisterShortcuts();
             else Shortcuts.ItemsSource = state.Shortcuts;
             events.RegisterEndpointNotificationCallback(notifications);
+            if (App.StartedWithWindows)
+            {
+                Hide();
+                await Task.Delay(TimeSpan.FromSeconds(12));
+            }
             await RunAsync(RefreshCore);
             if (state.OverlayEnabled) ToggleOverlay(false);
             await PreviewCapture.TryCaptureAsync(this);
@@ -124,9 +130,6 @@ public partial class MainWindow : Window
         Status.Text = "Rilevamento dispositivi…";
         await service.RefreshAsync();
         RenderList();
-        var selected = Profiles.SelectedItem;
-        Profiles.ItemsSource = null; Profiles.ItemsSource = state.Profiles;
-        Profiles.SelectedItem = selected ?? state.Profiles.FirstOrDefault();
         PopulateActions();
         RenderOverlaySettings();
         Status.Text = $"{state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && d.Connected)} collegati · {state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && !d.Connected)} scollegati";
@@ -153,7 +156,7 @@ public partial class MainWindow : Window
         DeviceCount.Text = list.Count + " dispositivi";
         ConnectedCount.Text = state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && d.Connected).ToString();
         OverlayCount.Text = state.Devices.Count(d => PeripheralCatalog.IsVisible(d) && d.Overlay).ToString();
-        ProfileCount.Text = state.Profiles.Count.ToString();
+        ShortcutCount.Text = state.Shortcuts.Count.ToString();
     }
 
     private void SearchChanged(object sender, TextChangedEventArgs e) { if (service != null) RenderList(); }
@@ -254,9 +257,19 @@ public partial class MainWindow : Window
             panel.Children.Add(open);
             var forget = new Button { Content = "Dimentica dispositivo", HorizontalAlignment = HorizontalAlignment.Left,
                 Foreground = (Brush)new BrushConverter().ConvertFromString("#FFB4AB")!, BorderBrush = (Brush)new BrushConverter().ConvertFromString("#76504F")!,
-                Margin = new Thickness(0, 14, 0, 0), ToolTip = "Rimuove dispositivo, impostazioni, profili e shortcut. Puoi ripristinarlo dalla pagina Overlay." };
+                Margin = new Thickness(0, 14, 0, 0), ToolTip = "Nasconde il dispositivo e le sue shortcut. Puoi ripristinarlo dalla pagina Overlay." };
             forget.Click += async (_, _) => await RunAsync(() => ForgetDeviceAsync(device));
             panel.Children.Add(forget);
+            var remove = new Button { Content = "Rimuovi definitivamente", HorizontalAlignment = HorizontalAlignment.Left,
+                Foreground = (Brush)new BrushConverter().ConvertFromString("#FF8A80")!, BorderBrush = (Brush)new BrushConverter().ConvertFromString("#8D3E3A")!,
+                ToolTip = "Elimina impostazioni e shortcut e impedisce al dispositivo di ricomparire." };
+            remove.Click += async (_, _) =>
+            {
+                if (MessageBox.Show(this, $"Rimuovere definitivamente {device.Name}?\n\nIl dispositivo non ricomparirà nei rilevamenti futuri.",
+                    "Rimuovi dispositivo", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+                    await RunAsync(() => RemoveDevicePermanentlyAsync(device));
+            };
+            panel.Children.Add(remove);
             var metadata = new StackPanel();
             metadata.Children.Add(Text("ID persistente\n" + device.Id, 11));
             if (device.Manufacturer.Length > 0) metadata.Children.Add(Text("Produttore · " + device.Manufacturer, 12));
@@ -415,7 +428,10 @@ public partial class MainWindow : Window
                     new Binding("Values[" + control.Id + "]") { Source = device, Mode = BindingMode.OneWay, Converter = new ToggleConverter() });
                 check.Click += async (_, _) => await RunAsync(async () =>
                 {
-                    await service.SetControlAsync(device, control.Id, check.IsChecked == true ? 1 : 0); state.Save();
+                    var requested = check.IsChecked == true ? 1 : 0;
+                    try { await service.SetControlAsync(device, control.Id, requested); }
+                    finally { check.IsChecked = device.Values.TryGetValue(control.Id, out var actual) && actual != 0; }
+                    state.Save();
                 });
                 panel.Children.Add(check);
             }
@@ -518,8 +534,7 @@ public partial class MainWindow : Window
             new("Mute di tutte le uscite", "mute-output"), new("Alza volume uscite del 5%", "volume-up"),
             new("Abbassa volume uscite del 5%", "volume-down"), new("Apri un programma o file", "launch")
         };
-        choices.AddRange(state.Profiles.Select(p => new ActionOption("Profilo · " + p.Name, "profile:" + p.Name)));
-        foreach (var device in state.Devices.Where(PeripheralCatalog.IsVisible))
+        foreach (var device in state.Devices.Where(d => PeripheralCatalog.IsVisible(d) && (d.Volume.HasValue || d.Controls.Count > 0)))
         {
             if (device.Volume.HasValue)
             {
@@ -543,13 +558,7 @@ public partial class MainWindow : Window
         if (action is "overlay" or "toggle-overlay") { ToggleOverlayVisibility(); return; }
         if (action == "focus-overlay") { ToggleOverlay(); return; }
         if (action == "launch") { Process.Start(new ProcessStartInfo(shortcut.Target) { Arguments = shortcut.Arguments, UseShellExecute = true }); return; }
-        if (action.StartsWith("profile:"))
-        {
-            var profile = state.Profiles.FirstOrDefault(p => p.Name == action[8..]) ?? throw new InvalidOperationException("Profilo non trovato");
-            var failures = await service.ApplyAsync(profile);
-            Status.Text = failures.Count == 0 ? "Profilo applicato: " + profile.Name : string.Join("; ", failures);
-        }
-        else if (action is "set-volume" or "toggle-device" or "set-control" or "toggle-control")
+        if (action is "set-volume" or "toggle-device" or "set-control" or "toggle-control")
         {
             var device = state.Devices.FirstOrDefault(d => d.Id == shortcut.DeviceId) ?? throw new InvalidOperationException("Dispositivo non trovato");
             if (action == "set-control") await service.SetControlAsync(device, shortcut.Control, shortcut.Value);
@@ -707,6 +716,8 @@ public partial class MainWindow : Window
         var forgotten = state.HiddenDeviceIds.Count;
         ForgottenDeviceCount.Text = forgotten == 0 ? "Nessun dispositivo dimenticato." : $"{forgotten} identificativi dimenticati. Puoi renderli nuovamente visibili.";
         RestoreForgottenButton.IsEnabled = forgotten > 0;
+        RemovedDeviceCount.Text = state.RemovedDeviceIds.Count == 0 ? "Nessun dispositivo rimosso definitivamente."
+            : $"{state.RemovedDeviceIds.Count} identificativi rimossi definitivamente.";
         updatingOverlaySettings = false;
     }
 
@@ -737,68 +748,17 @@ public partial class MainWindow : Window
         await Task.CompletedTask;
     }
 
+    private async Task RemoveDevicePermanentlyAsync(Device device)
+    {
+        var name = device.Name; service.RemoveDevicePermanently(device); RegisterShortcuts(); RenderList(); PopulateActions(); RenderOverlaySettings(); RenderOverlay();
+        Status.Text = name + " rimosso definitivamente";
+        await Task.CompletedTask;
+    }
+
     private async void RestoreForgottenDevices(object sender, RoutedEventArgs e) => await RunAsync(async () =>
     {
         service.RestoreForgottenDevices(); await RefreshCore(); Status.Text = "Dispositivi dimenticati ripristinati";
     });
-    private async void SaveProfile(object sender, RoutedEventArgs e) => await RunAsync(async () =>
-    {
-        var name = ProfileName.Text.Trim();
-        if (name.Length == 0) throw new InvalidOperationException("Inserisci un nome");
-        if (state.Profiles.Any(p => p.Name == name)) throw new InvalidOperationException("Nome già presente: scegli un nuovo nome");
-        await service.RefreshAsync(); state.Profiles.Add(service.Capture(name)); state.Save();
-        Profiles.ItemsSource = null; Profiles.ItemsSource = state.Profiles; Profiles.SelectedIndex = state.Profiles.Count - 1;
-        PopulateActions(); Status.Text = "Profilo salvato: " + name;
-    });
-    private async void ApplyProfile(object sender, RoutedEventArgs e)
-    {
-        if (Profiles.SelectedItem is Profile profile) await RunAsync(() => ExecuteAsync(new Shortcut { Action = "profile:" + profile.Name }));
-    }
-    private async void ExportProfile(object sender, RoutedEventArgs e)
-    {
-        if (Profiles.SelectedItem is not Profile profile) { Status.Text = "Seleziona un profilo da esportare"; return; }
-        var dialog = new Microsoft.Win32.SaveFileDialog { Title = "Esporta profilo Hub", Filter = "Profilo Hub (*.hubprofile)|*.hubprofile", FileName = "profilo.hubprofile" };
-        if (dialog.ShowDialog(this) == true) await RunAsync(() =>
-        {
-            ProfileTransfer.Export(state, profile, dialog.FileName); Status.Text = "Profilo esportato"; return Task.CompletedTask;
-        });
-    }
-    private void ProfileSelected(object sender, SelectionChangedEventArgs e)
-    {
-        if (ProfileSummary == null) return;
-        ProfileCount.Text = state.Profiles.Count.ToString();
-        ProfileSummary.Children.Clear();
-        if (Profiles.SelectedItem is not Profile profile) { ProfileSummary.Children.Add(Text("Nessun profilo selezionato.", 12)); return; }
-        foreach (var id in profile.Audio.Keys.Union(profile.Controls.Keys))
-        {
-            var device = state.Devices.FirstOrDefault(d => d.Id == id);
-            if (device?.Id.StartsWith("windows:") == true) continue;
-            var row = new StackPanel();
-            row.Children.Add(Text(device?.Name ?? id, 14));
-            if (profile.Audio.TryGetValue(id, out var audio)) row.Children.Add(Text($"Volume {audio.Volume * 100:0}% · {(audio.Muted ? "Mute" : "Audio attivo")}", 12));
-            if (profile.Controls.TryGetValue(id, out var values))
-                foreach (var (key, value) in values)
-                    row.Children.Add(Text((device?.Controls.FirstOrDefault(c => c.Id == key)?.Label ?? key) + $" · {value:0.##}", 11));
-            ProfileSummary.Children.Add(new Border { Child = row, Margin = new Thickness(0, 0, 0, 10), Padding = new Thickness(12), CornerRadius = new CornerRadius(8), Background = (Brush)new BrushConverter().ConvertFromString("#1D2C3E")! });
-        }
-    }
-    private async void ImportProfile(object sender, RoutedEventArgs e)
-    {
-        var dialog = new Microsoft.Win32.OpenFileDialog { Title = "Importa profilo Hub", Filter = "Profilo Hub (*.hubprofile)|*.hubprofile" };
-        if (dialog.ShowDialog(this) == true) await RunAsync(() =>
-        {
-            var profile = ProfileTransfer.Import(state, dialog.FileName); state.Save();
-            Profiles.ItemsSource = null; Profiles.ItemsSource = state.Profiles; Profiles.SelectedItem = profile;
-            PopulateActions(); RenderList(); Status.Text = "Importato: " + profile.Name + ". Premi Applica profilo per usarlo.";
-            return Task.CompletedTask;
-        });
-    }
-    private void DeleteProfile(object sender, RoutedEventArgs e)
-    {
-        if (Profiles.SelectedItem is not Profile profile) return;
-        state.Profiles.Remove(profile); state.Shortcuts.RemoveAll(s => s.Action == "profile:" + profile.Name);
-        state.Save(); RegisterShortcuts(); PopulateActions(); Profiles.ItemsSource = null; Profiles.ItemsSource = state.Profiles;
-    }
     private async void AddShortcut(object sender, RoutedEventArgs e) => await RunAsync(() =>
     {
         if (ActionChoice.SelectedItem is not ActionOption option) return Task.CompletedTask;
@@ -849,6 +809,12 @@ public partial class MainWindow : Window
     private static void Launch(string target) => Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
     private async void OpenSettings(object sender, RoutedEventArgs e) => await RunAsync(() => { Launch((string)((Button)sender).Tag); return Task.CompletedTask; });
     private async void OpenData(object sender, RoutedEventArgs e) => await RunAsync(() => { Launch(Settings.Folder); return Task.CompletedTask; });
+    private async void StartupSettingChanged(object sender, RoutedEventArgs e) => await RunAsync(() =>
+    {
+        StartupManager.SetEnabled(StartWithWindowsChoice.IsChecked == true);
+        Status.Text = StartWithWindowsChoice.IsChecked == true ? "Avvio con Windows attivato" : "Avvio con Windows disattivato";
+        return Task.CompletedTask;
+    });
     private async void RefreshClick(object sender, RoutedEventArgs e) => await RunAsync(RefreshCore);
 
     private sealed class Notifications(Action changed) : IMMNotificationClient

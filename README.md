@@ -1,8 +1,8 @@
 # Hub Tool
 
-Un centro di controllo nativo per Windows: dispositivi, audio, profili e shortcut, con un overlay discreto.
+Un centro di controllo nativo per Windows: dispositivi, audio e shortcut, con un overlay discreto.
 
-**0.5.4 è una prerelease.** L'elenco riguarda le periferiche d'interfaccia: audio, monitor, tastiere, mouse, videocamere, illuminazione compatibile, stampanti, scanner e hub USB esterni. Non include CPU, bus, controller host o altri nodi interni. La copertura dei controlli è descritta nella [matrice delle capacità](docs/CAPABILITIES.md).
+**0.6.0 è una prerelease.** L'elenco riguarda le periferiche d'interfaccia: audio, monitor, tastiere, mouse, videocamere, illuminazione compatibile, stampanti, scanner e hub USB esterni. Non include CPU, bus, controller host o altri nodi interni. La copertura dei controlli è descritta nella [matrice delle capacità](docs/CAPABILITIES.md).
 
 ## Download
 
@@ -21,9 +21,9 @@ I binari non sono ancora firmati con un certificato Authenticode. Gli hash perme
 ## Cosa puoi fare
 
 - Cercare e filtrare le periferiche d'interfaccia. Ogni tipo ha un'icona vettoriale; interfacce HID generiche, webcam virtuali, stampanti software e duplicati dello stesso scanner vengono esclusi.
-- Conservare i dispositivi scollegati, dimenticare quelli indesiderati e ripristinarli in seguito dalla pagina Overlay.
+- Conservare i dispositivi scollegati, dimenticare temporaneamente quelli indesiderati oppure rimuoverli definitivamente insieme alle relative shortcut.
 - Regolare volume, mute, canali e livello in dB di cuffie, altoparlanti e microfoni esposti da Core Audio.
-- Attivare, disattivare e regolare l'eco microfono/sidetone nelle cuffie quando il driver lo espone nella topologia audio Windows. Se il nodo mute del driver non è scrivibile, Hub usa il volume minimo e ricorda il livello da ripristinare.
+- Attivare, disattivare e regolare l'eco microfono/sidetone nelle cuffie quando il driver lo espone nella topologia audio Windows. Sui dispositivi Fifine Hub evita il nodo mute inefficace e usa il livello hardware minimo, ricordando il volume da ripristinare.
 - Regolare velocità puntatore, doppio clic, rotella, pulsante principale e ripetizione tastiera. Queste preferenze Windows sono globali, non per singolo mouse o tastiera.
 - Regolare luminosità e contrasto dei monitor che rispondono alle API DDC/CI.
 - Vedere l’anteprima della webcam in un normale riquadro WPF stabile, aggiornata a basso ritmo mentre si regolano i controlli standard esposti da IAMCameraControl/IAMVideoProcAmp.
@@ -32,9 +32,8 @@ I binari non sono ancora firmati con un certificato Authenticode. Gli hash perme
 - Controllare direttamente le luci monitor DX Light/QuikLight USB `1A86:FE07`: accensione, colore RGB/HEX, preset e luminosità.
 - Sincronizzare 54 zone LED con i bordi dello schermo, regolando fluidità, intensità dei colori e morbidezza delle transizioni.
 - Prendere automaticamente il controllo quando DX Light viene chiuso e riapplicare lo stato salvato, evitando che le luci restino spente. Hub e DX Light non accedono mai contemporaneamente al controller.
-- Salvare profili di audio, canali, input e monitor. I valori dei dispositivi assenti vengono conservati per la riconnessione.
-- Registrare shortcut globali per profili, singoli controlli, mute, volume o apertura di file/programmi con argomenti. I controlli binari, come Eco microfono attivo, possono essere impostati a un valore preciso oppure alternati tra acceso e spento a ogni pressione.
-- Importare/esportare profili `.hubprofile`; l'importazione non applica automaticamente impostazioni o comandi.
+- Registrare shortcut globali per singoli controlli, mute, volume o apertura di file/programmi con argomenti. I controlli binari, come Eco microfono attivo, possono essere impostati a un valore preciso oppure alternati tra acceso e spento a ogni pressione.
+- Avviare Hub con Windows in modalità silenziosa: resta nell’area notifiche e ritarda di 12 secondi la scansione dei dispositivi per alleggerire l’accesso al desktop.
 - Personalizzare l’overlay da una pagina dedicata: barra di sole icone orizzontale o verticale, dimensione, opacità, primo piano e compressione automatica. Ogni icona apre soltanto il proprio pannello; `Ctrl+Alt+H` mostra o nasconde la barra.
 - Aprire i pannelli Windows della categoria per le impostazioni non ancora integrate.
 
@@ -43,9 +42,9 @@ I binari non sono ancora firmati con un certificato Authenticode. Gli hash perme
 1. Avvia `HubTool.exe`. La scansione iniziale non cambia le impostazioni del PC.
 2. Seleziona un dispositivo. Gli slider sono continui durante il trascinamento, applicano al massimo ogni 110 ms e arrotondano al passo dichiarato dal driver; puoi anche cliccare direttamente un punto della barra.
 3. In **Overlay**, scegli dispositivi e orientamento, poi premi **Mostra / nascondi**. Trascina lo spazio intorno alle icone per spostare la barra e clicca un’icona per aprire quel dispositivo.
-4. Per ripristinare i valori all'avvio/riconnessione, attiva la relativa preferenza. Applicare un profilo abilita il ripristino dei dispositivi inclusi.
-5. In **Profili**, salva lo stato corrente con un nome nuovo. In **Shortcut**, scegli l'azione e la combinazione; un conflitto con un'altra app viene segnalato.
-6. Chiudere la finestra lascia Hub nell'area notifiche. Usa **Esci** nel menu dell'icona per terminarlo.
+4. Per ripristinare i valori all'avvio/riconnessione, attiva la relativa preferenza sul dispositivo.
+5. In **Shortcut**, scegli l'azione e la combinazione; un conflitto con un'altra app viene segnalato.
+6. In **Windows**, puoi attivare l’avvio automatico silenzioso. Chiudere la finestra lascia Hub nell'area notifiche; usa **Esci** nel menu dell'icona per terminarlo.
 
 Per le luci monitor, avvia Hub prima di uscire da DX Light. Finché DX Light è aperto, Hub conserva le modifiche senza contendere la periferica; entro circa un secondo dalla sua chiusura applica colore o sync salvati. Dopo il primo passaggio puoi lasciare DX Light chiuso e usare soltanto Hub.
 
@@ -67,12 +66,12 @@ Su Windows con SDK .NET 8:
 dotnet build src/HubTool/HubTool.csproj -c Release
 dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release
 dotnet run --project tests/HubTool.Tests/HubTool.Tests.csproj -c Release -- --hardware-read
-./scripts/package.ps1 -Version 0.5.4
+./scripts/package.ps1 -Version 0.6.0
 ```
 
-I test ordinari verificano persistenza, protocollo luci, merge dell'inventario, riconnessione e profili offline senza cambiare hardware. `--hardware-read` aggiunge letture reali di input, audio, monitor e luci. `--light-write` esegue una scrittura invariata sul controller e va usato con DX Light e Hub chiusi. [Verifica e limiti](docs/VERIFICATION.md).
+I test ordinari verificano persistenza, protocollo luci, merge dell'inventario, riconnessione, rimozione permanente e comando di avvio senza cambiare hardware. `--hardware-read --sidetone-toggle` prova e ripristina anche il sidetone reale; `--light-write` esegue una scrittura invariata sul controller e va usato con DX Light e Hub chiusi. [Verifica e limiti](docs/VERIFICATION.md).
 
-`HubTool.exe --preview PERCORSO` renderizza le cinque pagine, il layout minimo, la scheda webcam e l’overlay nelle due direzioni; verifica barra del titolo, apertura, Escape, ancoraggio e acquisizione del fotogramma. `--benchmark PERCORSO` misura l'idle senza generare immagini. Entrambi usano preferenze isolate, non registrano shortcut e terminano automaticamente. Le immagini possono mostrare nomi reali dei dispositivi e non vengono caricate automaticamente.
+`HubTool.exe --preview PERCORSO` renderizza le quattro pagine, il layout minimo, la scheda webcam e l’overlay nelle due direzioni; verifica barra del titolo, apertura, Escape, ancoraggio e acquisizione del fotogramma. `--benchmark PERCORSO` misura l'idle senza generare immagini. Entrambi usano preferenze isolate, non registrano shortcut e terminano automaticamente. Le immagini possono mostrare nomi reali dei dispositivi e non vengono caricate automaticamente.
 
 La CI esegue i test su Windows. I tag `v*` attivano il packaging e la pubblicazione di una prerelease GitHub.
 

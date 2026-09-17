@@ -3,10 +3,11 @@
 ## Eseguito localmente
 
 - Build Release con .NET SDK 8.0.425: zero errori e zero avvisi.
-- 35 controlli ordinari: persistenza, inventario, profili, dispositivo dimenticato, protocollo QuikLight, direzione luminosità, raccomandazioni camera e toggle shortcut 0→1→0; tutti passati. Le letture hardware aggiungono i controlli di input, audio, monitor e luci.
+- 33 controlli ordinari: persistenza, inventario, dispositivo dimenticato e rimosso definitivamente, comando di avvio silenzioso, protocollo QuikLight, raccomandazioni camera e toggle shortcut 0→1→0; tutti passati.
 - Scrittura reale invariata con DX Light e Hub chiusi: luminosità e colore statico accettati dal controller USB `1A86:FE07`, senza errori.
 - Rendering delle cinque pagine WPF, layout compatto, overlay orizzontale/verticale e pannello espanso completato. Verificati apertura, Escape, ancoraggio e assenza della barra del titolo.
 - Anteprima collegata alla EMEET SmartCam e resa come immagine WPF 960 × 540; il fotogramma è visibile anche nella cattura della UI. Enhance ha proposto 10 valori, li ha applicati e riletti tutti dal driver, poi ha ripristinato integralmente i valori iniziali senza errori.
+- Toggle sidetone verificato sulla Fifine: Hub ha forzato il fallback sul volume hardware, confermato lo stato disattivato, quindi riattivato l’eco e ripristinato il volume iniziale.
 - Passaggio operativo verificato avviando Hub dopo DX Light: importati stato acceso, sync attivo, colore `#E300FF` e 54 LED; nessun errore registrato.
 - Campione dell’EXE autonomo 0.5 in esecuzione con le impostazioni reali per 20 s: 0,25 s CPU, circa 0,08% della capacità totale sui 16 thread logici del Ryzen 7 7700; working set 248,8 MiB e memoria privata 158 MiB.
 

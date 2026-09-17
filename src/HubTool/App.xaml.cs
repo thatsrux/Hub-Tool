@@ -10,6 +10,7 @@ public partial class App : System.Windows.Application
     public static string? PreviewDirectory { get; private set; }
     public static bool BenchmarkOnly { get; private set; }
     public static bool FastPreview { get; private set; }
+    public static bool StartedWithWindows { get; private set; }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindow(string? className, string title);
     [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr window, uint message, IntPtr w, IntPtr l);
 
@@ -26,6 +27,7 @@ public partial class App : System.Windows.Application
         }
         else
         {
+            StartedWithWindows = e.Args.Length == 1 && e.Args[0].Equals("--startup", StringComparison.OrdinalIgnoreCase);
             instance = new Mutex(true, "Local\\HubTool.Desktop", out bool created);
             if (!created)
             {
@@ -48,6 +50,12 @@ public partial class App : System.Windows.Application
             window.ShowActivated = false;
             window.WindowStartupLocation = WindowStartupLocation.Manual;
             window.Left = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth + 100;
+        }
+        else if (StartedWithWindows)
+        {
+            window.ShowActivated = false;
+            window.ShowInTaskbar = false;
+            window.WindowState = WindowState.Minimized;
         }
         window.Show();
     }

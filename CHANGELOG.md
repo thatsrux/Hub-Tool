@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 — 2026-09-17
+
+- Aggiunto l’avvio con Windows tramite una sola voce utente: Hub parte nascosto nell’area notifiche e attende 12 secondi prima della scansione dei dispositivi.
+- Riparato nuovamente l’eco microfono Fifine: il driver conferma un mute inefficace, quindi Hub forza il fallback sul volume hardware e ripristina il livello precedente alla riattivazione.
+- Rimossa completamente la sezione Profili, insieme a importazione, esportazione, azioni e codice non più utilizzato; i profili immagine della videocamera restano disponibili.
+- Aggiunta la rimozione definitiva di un dispositivo, distinta da Dimentica: blocca ID logico e fisico, cancella le shortcut collegate e impedisce che ricompaia.
+- Le azioni Shortcut elencano soltanto dispositivi che espongono realmente volume o controlli.
+
 ## 0.5.4 — 2026-09-15
 
 - Aggiunta alle shortcut l’azione attiva/disattiva per Eco microfono e per ogni altro controllo binario 0/1.

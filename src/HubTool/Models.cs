@@ -62,14 +62,6 @@ public sealed class CameraImageProfile
     public override string ToString() => Name;
 }
 public sealed class AudioSetting { public float Volume { get; set; } public bool Muted { get; set; } }
-public sealed class Profile
-{
-    public string Name { get; set; } = "";
-    public Dictionary<string, AudioSetting> Audio { get; set; } = new();
-    public Dictionary<string, Dictionary<string, double>> Controls { get; set; } = new();
-    public override string ToString() => Name;
-}
-
 public sealed class Shortcut
 {
     public string Gesture { get; set; } = "Ctrl+Alt+H";
@@ -86,7 +78,6 @@ public sealed class Shortcut
 public sealed class Settings
 {
     public List<Device> Devices { get; set; } = new();
-    public List<Profile> Profiles { get; set; } = new();
     public List<Shortcut> Shortcuts { get; set; } = new() { new() };
     public bool OverlayEnabled { get; set; }
     public double? OverlayLeft { get; set; }
@@ -97,6 +88,7 @@ public sealed class Settings
     public bool OverlayAutoCollapse { get; set; } = true;
     public bool OverlayAlwaysOnTop { get; set; } = true;
     public List<string> HiddenDeviceIds { get; set; } = new();
+    public List<string> RemovedDeviceIds { get; set; } = new();
     [JsonIgnore] public string RecoveryNotice { get; set; } = "";
     public static string? DataDirectoryOverride { get; set; }
     public static string Folder => DataDirectoryOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HubTool");
@@ -115,6 +107,7 @@ public sealed class Settings
                 shortcut.Action = "toggle-overlay";
                 if (shortcut.Label == "Overlay" || shortcut.Label.StartsWith("Mostra e focalizza", StringComparison.OrdinalIgnoreCase)) shortcut.Label = "Mostra/nascondi overlay";
             }
+            state.Shortcuts.RemoveAll(s => s.Action.StartsWith("profile:", StringComparison.Ordinal));
             state.Validate();
             return state;
         }
@@ -128,7 +121,7 @@ public sealed class Settings
 
     public void Validate()
     {
-        if (Devices == null || Profiles == null || Shortcuts == null || HiddenDeviceIds == null) throw new JsonException("Collezioni mancanti");
+        if (Devices == null || Shortcuts == null || HiddenDeviceIds == null || RemovedDeviceIds == null) throw new JsonException("Collezioni mancanti");
         if (Devices.Any(d => d == null || string.IsNullOrEmpty(d.Id) || d.Name == null || d.Kind == null || d.Values == null || d.ControlMemory == null || d.Controls == null || d.CameraProfiles == null
             || d.Values.Any(v => !double.IsFinite(v.Value)) || d.ControlMemory.Any(v => !double.IsFinite(v.Value))
             || d.CameraProfiles.Any(p => p == null || string.IsNullOrWhiteSpace(p.Name) || p.Values == null || p.Values.Values.Any(v => !double.IsFinite(v)))
@@ -138,6 +131,8 @@ public sealed class Settings
             throw new JsonException("ID duplicati");
         if (HiddenDeviceIds.Any(string.IsNullOrWhiteSpace) || HiddenDeviceIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != HiddenDeviceIds.Count)
             throw new JsonException("Elenco dispositivi dimenticati non valido");
+        if (RemovedDeviceIds.Any(string.IsNullOrWhiteSpace) || RemovedDeviceIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != RemovedDeviceIds.Count)
+            throw new JsonException("Elenco dispositivi rimossi non valido");
         if (Devices.Any(d => d.Controls.Any(c => c == null || string.IsNullOrEmpty(c.Id) || c.Label == null || !double.IsFinite(c.Min)
             || !double.IsFinite(c.Max) || !double.IsFinite(c.Step) || c.Max < c.Min || c.Step <= 0)
             || d.Controls.Select(c => c.Id).Distinct().Count() != d.Controls.Count))
@@ -145,9 +140,6 @@ public sealed class Settings
         if (Devices.Any(d => d.Pending != null && (d.Pending.Controls == null || d.Pending.Controls.Values.Any(v => !double.IsFinite(v))
             || d.Pending.Audio is { } a && (!float.IsFinite(a.Volume) || a.Volume < 0 || a.Volume > 1))))
             throw new JsonException("Impostazioni in attesa non valide");
-        if (Profiles.Any(p => p == null || p.Name == null || p.Audio == null || p.Controls == null || p.Audio.Values.Any(v => v == null || !float.IsFinite(v.Volume) || v.Volume < 0 || v.Volume > 1)
-            || p.Controls.Values.Any(v => v == null || v.Values.Any(n => !double.IsFinite(n)))))
-            throw new JsonException("Profilo non valido");
         if (Shortcuts.Any(s => s == null || s.Gesture == null || s.Action == null || !double.IsFinite(s.Value))) throw new JsonException("Shortcut non valida");
         if (OverlayLeft.HasValue && !double.IsFinite(OverlayLeft.Value) || OverlayTop.HasValue && !double.IsFinite(OverlayTop.Value)) throw new JsonException("Posizione overlay non valida");
         if (OverlayOrientation is not ("Horizontal" or "Vertical") || !double.IsFinite(OverlayIconSize) || OverlayIconSize is < 42 or > 68

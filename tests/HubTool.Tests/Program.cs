@@ -58,6 +58,10 @@ Check(MainWindow.CanToggle(toggleDevice.Controls[0]) && MainWindow.CanToggle(tog
 toggleDevice.Values["sidetone:enabled:11"] = 0;
 Check(MainWindow.ToggleControlValue(toggleDevice, "sidetone:enabled:11") == 1,
     "Control shortcuts toggle from off back to on");
+Check(AudioTopologyControls.RequiresVolumeFallback("Altoparlanti (fifine Microphone)")
+    && !AudioTopologyControls.RequiresVolumeFallback("Altoparlanti Realtek"), "Fifine sidetone bypasses its ineffective mute node");
+Check(StartupManager.BuildCommand(@"C:\Program Files\Hub Tool\HubTool.exe") == "\"C:\\Program Files\\Hub Tool\\HubTool.exe\" --startup",
+    "Windows startup command quotes the executable and uses silent startup mode");
 Check(CameraControls.PreferredDefaultFlags(3) == 1 && CameraControls.PreferredDefaultFlags(2) == 2,
     "Camera reset prefers automatic mode and falls back to manual mode");
 Check(MainWindow.SnapSliderValue(7.6, -10, 10, 3) == 8 && MainWindow.SnapSliderValue(99.9, 0, 90, 5) == 90,
@@ -112,15 +116,15 @@ using (var forgetting = new DeviceService(reloaded, controlLights: false))
     Check(!reloaded.Devices.Contains(forgotten) && reloaded.HiddenDeviceIds.Contains("usb:forgotten"), "Forgetting removes and persistently hides a device");
     forgetting.RestoreForgottenDevices();
     Check(reloaded.HiddenDeviceIds.Count == 0, "Forgotten devices can be restored");
+    var permanent = new Device { Id = "usb:permanent", PhysicalId = "container:permanent", Name = "Unused", Kind = "USB", Connected = true };
+    reloaded.Devices.Add(permanent); reloaded.Shortcuts.Add(new() { DeviceId = permanent.Id, Action = "set-control" });
+    forgetting.RemoveDevicePermanently(permanent);
+    Check(!reloaded.Devices.Contains(permanent) && reloaded.RemovedDeviceIds.Contains(permanent.Id)
+        && reloaded.RemovedDeviceIds.Contains(permanent.PhysicalId) && reloaded.Shortcuts.All(s => s.DeviceId != permanent.Id),
+        "Permanent removal blocks both device identifiers and removes its shortcuts");
 }
 using var service = new DeviceService(reloaded);
 Check(!reloaded.Devices.Single().Connected, "Startup invalidates stale connection state");
-var profile = service.Capture("Work");
-reloaded.Devices.Single().Volume = .9f;
-Check(profile.Audio["audio:one"].Volume == .6f, "Captured profile is independent of live state");
-var failures = await service.ApplyAsync(profile);
-Check(failures.Count == 0 && reloaded.Devices.Single().Volume == .6f && reloaded.Devices.Single().Restore,
-    "Applying profile to absent device queues restoration without COM writes");
 bool rejected = false;
 try { service.SetAudio(reloaded.Devices.Single(), float.NaN, false); } catch (ArgumentOutOfRangeException) { rejected = true; }
 Check(rejected, "Rejects NaN audio before persistence");
@@ -145,21 +149,6 @@ Check(retryList.Count == 1 && pendingReload.Pending!.Controls["brightness"] == 7
     "Reload and refresh preserve a failed target alongside current value");
 await RequestApplier.ApplyAsync(pendingReload, _ => { }, (key, value) => { applied.Add(key); return Task.CompletedTask; });
 Check(pendingReload.Pending == null && applied.SequenceEqual(new[] { "contrast", "brightness" }), "Retry skips already successful fields");
-
-var transferState = new Settings { Devices = [new Device { Id = "audio:export", Name = "Exported headset", Kind = "Uscita audio", Volume = .2f }] };
-transferState.Profiles.Add(new Profile { Name = "Travel", Audio = new() { ["audio:export"] = new AudioSetting { Volume = .2f, Muted = true } } });
-var profilePath = Path.Combine(Settings.Folder, "test.hubprofile");
-ProfileTransfer.Export(transferState, transferState.Profiles.Single(), profilePath);
-var importState = new Settings();
-var imported = ProfileTransfer.Import(importState, profilePath);
-Check(imported.Audio["audio:export"].Muted && !importState.Devices.Single().Connected && !importState.Devices.Single().Restore && importState.Devices.Single().Pending == null,
-    "Profile import preserves data without applying device settings");
-Check(ProfileTransfer.Import(importState, profilePath).Name == "Travel (2)", "Import gives duplicate profile a distinct name");
-var invalidPath = Path.Combine(Settings.Folder, "invalid.hubprofile");
-File.WriteAllText(invalidPath, "{\"Version\":1,\"Profile\":{\"Name\":\"Bad\",\"Audio\":{\"missing\":{\"Volume\":2}}},\"Devices\":[]}");
-rejected = false;
-try { ProfileTransfer.Import(importState, invalidPath); } catch (JsonException) { rejected = true; }
-Check(rejected && importState.Profiles.Count == 2, "Invalid import is rejected before mutating existing profiles");
 
 File.WriteAllText(Path.Combine(Settings.Folder, "settings.json"), "{broken");
 Check(Settings.Load().Devices.Count == 0 && Directory.GetFiles(Settings.Folder, "*.corrupt-*").Length == 1,
@@ -188,8 +177,12 @@ if (args.Contains("--hardware-read"))
             var original = fifineOutput.Values[enabled.Id];
             await live.SetControlAsync(fifineOutput, enabled.Id, original == 0 ? 1 : 0);
             Check(fifineOutput.Values[enabled.Id] != original, "Sidetone toggle changes the effective hardware state");
+            if (original != 0) Check(AudioTopologyControls.IsFallbackActiveForDiagnostics(fifineOutput),
+                "Fifine sidetone disable uses the hardware volume fallback");
             await live.SetControlAsync(fifineOutput, enabled.Id, original);
             Check(fifineOutput.Values[enabled.Id] == original, "Sidetone toggle restores its initial hardware state");
+            if (original != 0) Check(!AudioTopologyControls.IsFallbackActiveForDiagnostics(fifineOutput),
+                "Fifine sidetone restore clears the volume fallback");
         }
     }
     Console.WriteLine(JsonSerializer.Serialize(new { Devices = liveState.Devices.Count,
